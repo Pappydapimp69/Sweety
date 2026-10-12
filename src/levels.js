@@ -48,11 +48,11 @@ const goal = sec(10, [...sky(10, '.........#'), '.....**..#', '.....**..#', '...
 
 // ---------- Chapter 1: The Garden — plates, doors, bridges, stacking ----------
 const g_step = sec(10, [...sky(9), '....h', '', '...###', '...###', '######^^^#', ground(10)]);
-const g_door = sec(14, [...sky(10, '.......#'), '.......A', '.......A', '...1...A...1', ground(14)]);
+const g_door = sec(14, [...sky(10, '.......#'), '.......A', '.......A', '...1...A...1', ground(14)], [{ type: 'sign', x: 1, text: 'Stand on a plate to hold the door of its colour open for your partner.' }]);
 const g_stack = sec(16, [
   ...sky(7), '............h', '.........2', '......##########',
   '......B', '......B', '......B', ground(16),
-]);
+], [{ type: 'sign', x: 2, text: 'Too high? One stands still, the other jumps on their head.' }, { type: 'talk', x: 3, id: 'garden1' }]);
 const g_pit = sec(20, [
   ...sky(9), '.........h', '', '....##...##...##', '....##...##...##',
   '##^^##^^^##^^^##^^##', ground(20),
@@ -60,57 +60,57 @@ const g_pit = sec(20, [
 const g_bridge = sec(18, [
   ...sky(12), '.3..............3', '###cccccccccccc###', '###............###',
   '###............###', '###^^^^^^^^^^^^###',
-]);
+], [{ type: 'sign', x: 0, text: 'A bridge holds only while someone stands on a plate of its colour.' }]);
 
 // ---------- Chapter 2: The Toolbox — Sugar's pins, Spice's slam ----------
 const t_crates = sec(16, [
   ...sky(13, '..........##'), '####xxx#####...#', '####...........#', '####..........##', ground(16),
-]);
+], [{ type: 'sign', x: 1, text: 'Spice: jump, then {spice} in the air to slam through the crates.' }]);
 const t_pins = sec(16, [
   ...sky(6), '............h', '............1', '........########', '........########',
   '........########', '........A', '........A', ground(16),
-]);
+], [{ type: 'sign', x: 2, text: 'Sugar: jump and press {sugar} to pin the wall. Only Spice can stand on pins.' }]);
 const t_launch = sec(20, [
   ...sky(5), '..............h', '...............2', '............########',
   '............########', '............########', '............########',
   '............B', '............B', '####LL###LL#########', ground(20),
-]);
+], [{ type: 'sign', x: 1, text: 'Sugar waits on the far pad. Spice slams the near one ({spice} in the air).' }, { type: 'talk', x: 2, id: 'toolbox1' }]);
 
 // ---------- Chapter 3: The Night — Sugar's lantern, Spice shrinks and grows ----------
 const n_pit = sec(20, [
   ...sky(10), '.........h', '', '', '##~~~~~~~~~~~~~~~~##', '##................##',
   '##................##', '##................##', '##^^^^^^^^^^^^^^^^##',
-]);
-const n_crawl = sec(16, [...sky(10, '......##'), '......AA', '......AA', '...........1', ground(16)]);
+], [{ type: 'sign', x: 0, text: "Hidden stones only hold in Sugar's light. Stay close together!" }]);
+const n_crawl = sec(16, [...sky(10, '......##'), '......AA', '......AA', '...........1', ground(16)], [{ type: 'sign', x: 1, text: 'Small Spice fits through the hole. {spice} to shrink or grow.' }]);
 const n_heavy = sec(18, [
   ...sky(10, '.........#'), '.........', '.........B', '......6..B', ground(18),
-]);
+], [{ type: 'sign', x: 2, text: 'Big Spice presses the heavy plate. Small Spice fits the hole above the door.' }]);
 const n_climb = sec(18, [
   '.................#', '.................#', '.............***#', '.............***#',
   '.............***#', '............######', '............######', '.........~~.######',
   '............######', '......~~....######', '............######', '...~~.......######',
   '............######', ground(18),
-]);
+], [{ type: 'sign', x: 1, text: 'Sugar: hold {sugar} to shine brighter while Spice climbs.' }, { type: 'talk', x: 2, id: 'night1' }]);
 
 // ---------- Chapter 4: The Attic — Sugar swaps, Spice flips gravity ----------
 // Indoors: rows 0-3 are the roof, so flipped Spice has a ceiling to walk on.
 const roof = (w) => Array(4).fill('#'.repeat(w));
-const room = (w, rows) => sec(w, [...roof(w), ...rows]);
+const room = (w, rows, ents = []) => sec(w, [...roof(w), ...rows], ents);
 const a_start = room(8, [...Array(8).fill('#'), '#.PQ', ground(8)]);
-const a_intro = room(16, [...Array(9).fill(''), '####^^^^^^^^####', ground(16)], [{ type: 'talk', x: 2, id: 'attic1' }]);
+const a_intro = room(16, [...Array(9).fill(''), '####^^^^^^^^####', ground(16)], [{ type: 'talk', x: 2, id: 'attic1' }, { type: 'sign', x: 1, text: 'Spice: {spice} to walk on the ceiling. Sugar: {sugar} to swap places with him.' }]);
 const a_doors = room(18, [
   '.........B...1', '.........B', '.........B', '.........#', '.........#', '.........#',
   '.........A', '.........A', '.....2...A', ground(18),
-]);
+], [{ type: 'sign', x: 3, text: 'A plate on the ceiling? Only upside-down feet can press it.' }]);
 const a_check = room(6, [...Array(8).fill(''), '..!', ground(6)]);
 const a_zig = room(24, [
   '....vvvv.........vvv', ...Array(4).fill(''), '..............h', '', '', '',
   '#########^^^^^^^########', ground(24),
-], [{ type: 'talk', x: 1, id: 'attic2' }]);
+], [{ type: 'talk', x: 1, id: 'attic2' }, { type: 'sign', x: 2, text: 'Zig and zag: flip where the spikes leave a gap.' }]);
 const a_goal = room(14, [
   '.............#', '.............#', '.........***.#', '.........***.#', '.........***.#',
   '.......#######', '.......#######', '.......#######', '.......#######', ground(14),
-]);
+], [{ type: 'sign', x: 2, text: 'The shelf: a shoulder for Sugar, the ceiling for Spice.' }]);
 
 // ---------- Chapter 5: The Sky — Sugar's gust, Spice's umbrella ----------
 const pit = (w, l, r) => '#'.repeat(l) + '.'.repeat(w - l - r) + '#'.repeat(r);
@@ -119,20 +119,18 @@ const s_cloud = sec(24, [
   pit(24, 3, 6), pit(24, 3, 6), pit(24, 3, 6), pit(24, 3, 6), pit(24, 3, 6),
 ], [
   { type: 'platform', w: 3, path: [[3, 13], [15, 13]], period: 7, g: 1, look: 'cloud' },
-  { type: 'talk', x: 1, id: 'sky1' },
-]);
+  { type: 'talk', x: 1, id: 'sky1' }, { type: 'sign', x: 1, text: 'Spice jumps and holds {spiceJump} to glide. Sugar blows him across with {sugar}.' }]);
 const s_vent = sec(22, [
   ...sky(4), '.......h', '..............2', '..........############', '..........############',
   '..........############', '..........############', '..........############',
   '..........B', '..........B', '#######V##############', ground(22),
-]);
+], [{ type: 'sign', x: 4, text: 'Vents lift Spice while he glides.' }]);
 const s_wheel = sec(26, [
   ...sky(10, '........#'), '........C', '........C', '........C',
   '###########dddddddddddd###', pit(26, 11, 3),
 ], [
   { type: 'pinwheel', x: 5, y: 10, g: 3 },
-  { type: 'talk', x: 1, id: 'sky2' },
-]);
+  { type: 'talk', x: 1, id: 'sky2' }, { type: 'sign', x: 2, text: 'Gust the pinwheel ({sugar}) and its door opens for a moment.' }]);
 s_wheel[12] = '........C..............4..';
 s_wheel[9] = '........#.........h.......';
 
@@ -142,20 +140,18 @@ const c_saws = sec(22, [
   '#A##################..', '#.....................', '#....................#', ground(22),
 ], [
   ...[6.5, 9.5, 12.5].map((x) => ({ type: 'saw', path: [[x, 10.55], [x, 12.45]], period: 1.2, r: 0.5 })),
-  { type: 'talk', x: 0, id: 'clock1' },
-]);
+  { type: 'talk', x: 0, id: 'clock1' }, { type: 'sign', x: 1, text: 'Sugar: hold {sugar} to stop the saws while they are up.' }]);
 const c_bob = sec(24, [
   ...sky(10), '...........h', '', '......................2',
   '##bbbbbbbbbbbbbbbbbbbb##', pit(24, 2, 2),
-], [4, 10, 16].map((x) => ({ type: 'platform', w: 3, path: [[x, 9.5], [x, 14.5]], period: 2.4, look: 'gear' })));
+], [...[4, 10, 16].map((x) => ({ type: 'platform', w: 3, path: [[x, 9.5], [x, 14.5]], period: 2.4, look: 'gear' })), { type: 'sign', x: 1, text: 'Stop the gears when they line up. Spice hops across.' }]);
 const c_ferry = sec(26, [
   ...sky(12), '.........##...........3',
   '##.......##.......########', '.........##',
 ], [
   { type: 'platform', w: 3, path: [[2, 11], [15, 11]], period: 9, g: 3, look: 'gear' },
   { type: 'saw', path: [[6, 7], [6, 11]], period: 1.6, r: 0.55, g: 3, stop: true },
-  { type: 'talk', x: 0, id: 'clock2' },
-]);
+  { type: 'talk', x: 0, id: 'clock2' }, { type: 'sign', x: 0, text: 'Spice: jump, then {spice} to dash. Hold the plate when the saw is up.' }]);
 
 // ---------- Chapter 7: Home — every power, one last climb ----------
 const h_door = sec(14, [...sky(10, '.......#'), '.......A', '.......A', '...1...A...1', ground(14)], [{ type: 'talk', x: 1, id: 'home1' }]);
@@ -185,7 +181,7 @@ const h_climb = sec(24, [
   '..............##########', '..........###.##########', '..............##########',
   '......###.....##########', '..............##########', '..###.........##########',
   '!.............##########', ground(24),
-], [{ type: 'talk', x: 1, id: 'home2' }]);
+], [{ type: 'talk', x: 1, id: 'home2' }, { type: 'sign', x: 3, text: 'Climb! The water will not wait.' }]);
 
 // ---------- mini-game arenas ----------
 const arena = sec(32, [
@@ -338,6 +334,9 @@ export const STORY = {
     outro: [['Spice', 'Happy anniversary, Sugar.'], ['Sugar', 'Happy anniversary. Same time next year?'], ['Spice', 'Every year.']],
   },
   talk: {
+    garden1: [['Sugar', 'Lend me a shoulder?'], ['Spice', 'Always.']],
+    toolbox1: [['Spice', 'Stand on the pad. Trust me.'], ['Sugar', 'Famous last words.']],
+    night1: [['Sugar', 'I\'ll light the way.'], ['Spice', 'I\'ll be right behind you.']],
     attic1: [['Sugar', 'Floor\'s full of spikes.'], ['Spice', 'Ceiling isn\'t. Then swap me back.']],
     attic2: [['Spice', 'Spikes on the ceiling AND the floor?'], ['Sugar', 'Zig and zag, love.']],
     sky1: [['Sugar', 'Jump, and I\'ll blow you across!'], ['Spice', 'Then I\'ll hold the cloud for you.']],

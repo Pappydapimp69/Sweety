@@ -48,6 +48,13 @@ export function createRun(chapterId, opts = {}) {
   }
   const ents = (ch.ents || []).map((e, i) => ({ ...e, i, t: 0, x: e.path ? e.path[0][0] : e.x, y: e.path ? e.path[0][1] : e.y, prevX: 0, prevY: 0, spin: 0 }));
   for (const e of ents) { placeMover(e); e.prevX = e.x; e.prevY = e.y; }
+  for (const e of ents) if (e.type === 'sign' && e.y === undefined) {   // stand it on the floor below
+    const cx = Math.floor(e.x);
+    let y = h - 1;
+    while (y > 0 && !(SOLID_BASE.includes(tileRaw(grid, w, h, cx, y)) && !SOLID_BASE.includes(tileRaw(grid, w, h, cx, y - 1)))) y--;
+    if (y > 0 && SOLID_BASE.includes(tileRaw(grid, w, h, cx, h - 1))) { while (y < h - 1 && !SOLID_BASE.includes(tileRaw(grid, w, h, cx, y))) y++; }
+    e.y = y > 0 ? y : 13;
+  }
   const mode = ch.mini || 'chapter';
   const s = {
     chapterId: ch.id, mode, bonk: mode === 'bonk', powers: ch.powers, zones: ch.zones || null,
@@ -200,8 +207,11 @@ function rectHitsSolid(s, x, y, w, h) {
 function placeMover(e) {
   if (!e.path) return;
   const [a, b] = e.path;
+  // ping-pong with smoothstep ease: pure arithmetic, so two browsers agree to the bit
+  // (Math.cos is not guaranteed identical across engines, and online play replays inputs)
   const u = (e.t / e.period + (e.phase || 0)) % 1;
-  const f = (1 - Math.cos(u * Math.PI * 2)) / 2;
+  const v = u < 0.5 ? u * 2 : 2 - u * 2;
+  const f = v * v * (3 - 2 * v);
   e.x = a[0] + (b[0] - a[0]) * f;
   e.y = a[1] + (b[1] - a[1]) * f;
 }
@@ -681,7 +691,8 @@ function touch(s, p) {
     if (e.type !== 'saw') continue;
     const nx = Math.max(p.x, Math.min(e.x, p.x + p.w)), ny = Math.max(p.y, Math.min(e.y, p.y + p.h));
     const r = (e.r || 0.6) * 0.85;
-    if ((nx - e.x) ** 2 + (ny - e.y) ** 2 < r * r) return kill(s, p);
+    const ddx = nx - e.x, ddy = ny - e.y;
+    if (ddx * ddx + ddy * ddy < r * r) return kill(s, p);
   }
 }
 

@@ -13,7 +13,7 @@ test('same inputs, same world (deterministic)', () => {
 
 test('sim stays pure: no Math.random, Date, DOM or storage', () => {
   const src = readFileSync(new URL('../src/sim.js', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
-  for (const bad of ['Math.random', 'Date.now', 'performance.now', 'document.', 'window.', 'localStorage'])
+  for (const bad of ['Math.random', 'Date.now', 'performance.now', 'document.', 'window.', 'localStorage', 'Math.sin', 'Math.cos', 'Math.tan', 'Math.exp', 'Math.log', 'Math.pow', 'Math.hypot', 'Math.atan', '**'])
     assert.ok(!src.includes(bad), `sim.js uses ${bad}`);
 });
 

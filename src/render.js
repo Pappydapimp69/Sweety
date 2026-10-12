@@ -305,6 +305,12 @@ function drawEnt(ctx, s, e, sx, sy, k, t) {
       ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.setLineDash([4, 6]); ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(sx(e.path[0][0]), sy(e.path[0][1])); ctx.lineTo(sx(e.path[1][0]), sy(e.path[1][1])); ctx.stroke(); ctx.setLineDash([]);
     }
+  } else if (e.type === 'sign') {
+    const x = sx(e.x + 0.5), y = sy(e.y);
+    ctx.fillStyle = '#8d6e63'; ctx.fillRect(x - k * 0.05, y - k * 0.9, k * 0.1, k * 0.9);
+    ctx.fillStyle = '#d7b98e'; ctx.fillRect(x - k * 0.38, y - k * 1.2, k * 0.76, k * 0.45);
+    ctx.fillStyle = '#6d4c41'; ctx.font = `700 ${Math.max(10, k * 0.36)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('?', x, y - k * 0.97);
   } else if (e.type === 'pinwheel') {
     const x = sx(e.x + 0.5), y = sy(e.y + 0.5), r = k * 0.45;
     ctx.fillStyle = '#868e96'; ctx.fillRect(x - k * 0.04, y, k * 0.08, k * 0.9);

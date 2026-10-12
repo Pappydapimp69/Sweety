@@ -30,3 +30,22 @@ for (const ch of [...CHAPTERS, ...MINIGAMES]) {
     if (!ch.mini) assert.ok(Math.abs(a.x - b.x) <= 2 && a.y === b.y);
   });
 }
+
+import { STORY } from '../src/levels.js';
+test('every talk trigger has lines, and every set of lines has a trigger', () => {
+  const used = new Set();
+  for (const ch of CHAPTERS) for (const e of ch.ents) if (e.type === 'talk') {
+    assert.ok(STORY.talk[e.id], `${ch.id}: talk ${e.id} has no lines`);
+    used.add(e.id);
+  }
+  for (const id of Object.keys(STORY.talk)) assert.ok(used.has(id), `lines ${id} are never triggered`);
+});
+
+test('every chapter has signs, and each sign stands on something', () => {
+  for (const ch of CHAPTERS) {
+    const s = createRun(ch.id);
+    const signs = s.ents.filter((e) => e.type === 'sign');
+    assert.ok(signs.length >= 1, ch.id);
+    for (const e of signs) assert.ok(Number.isInteger(e.y) && e.y > 0 && e.y < s.h, `${ch.id} sign at ${e.x} has y ${e.y}`);
+  }
+});

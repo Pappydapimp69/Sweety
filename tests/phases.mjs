@@ -153,6 +153,7 @@ function zigzag() {
 }
 
 export function skyPhases() {
+  const mem = {};   // bot memory lives here, never on the sim state
   return [
     { name: 'to the edge', ctrl: (s) => [walk(sg(s), 9), walk(sp(s), 10.4)], done: (s) => near(sg(s), 9) && near(sp(s), 10.4) },
     { name: 'Spice leaps, Sugar gusts, Spice glides', ctrl: (s) => {
@@ -162,7 +163,7 @@ export function skyPhases() {
     { name: 'Spice holds the cloud', ctrl: (s) => [walk(sg(s), 12.5), walk(sp(s), 29.5)], done: (s) => near(sp(s), 29.5) && sg(s).ride === 0 },
     { name: 'Sugar rides across', ctrl: (s) => [s.ents[0].x > 22.5 ? walk(sg(s), 31) : I, walk(sp(s), 29.5)], done: (s) => near(sg(s), 31) },
     { name: 'to the vent', ctrl: (s) => [walk(sg(s), 43), walk(sp(s), 45.5)], done: (s) => near(sg(s), 43) && near(sp(s), 45.5) },
-    { name: 'Spice rides the vent up', ctrl: (s) => { const p = sp(s); if (p.y < 3) p.botHigh = true; return [I, { ...walk(p, p.botHigh ? 52.5 : 45.5), jump: true, jumpPressed: p.onGround && !p.botHigh }]; },
+    { name: 'Spice rides the vent up', ctrl: (s) => { const p = sp(s); if (p.y < 3) mem.high = true; return [I, { ...walk(p, mem.high ? 52.5 : 45.5), jump: true, jumpPressed: p.onGround && !mem.high }]; },
       done: (s) => near(sp(s), 52.5) && feet(sp(s)) < 6.1 },
     { name: 'Sugar under the ledge', ctrl: (s) => [walk(sg(s), 63), walk(sp(s), 52.5)], done: (s) => near(sg(s), 63) },
     { name: 'Spice down', ctrl: (s) => [I, walk(sp(s), 64)], done: (s) => near(sp(s), 64) },
@@ -171,7 +172,7 @@ export function skyPhases() {
     { name: 'Spice glides the pit', ctrl: (s) => { const p = sp(s); return [I, { ...I, right: cx(p) < 89.5, jump: true, jumpPressed: p.onGround && cx(p) < 77 }]; },
       done: (s) => near(sp(s), 89.5, 0.6), max: 600 },
     { name: 'Spice on plate 4', ctrl: (s) => [I, walk(sp(s), 89.5)], done: (s) => near(sp(s), 89.5) },
-    { name: 'Sugar spins it again and runs', ctrl: (s) => { const p = sg(s); if (cx(p) > 75) p.botPast = true; return [{ ...walk(p, s.pressed[3] || p.botPast ? 92 : 67.4), abilityPressed: !s.pressed[3] && cx(p) < 70 }, walk(sp(s), 89.5)]; },
+    { name: 'Sugar spins it again and runs', ctrl: (s) => { const p = sg(s); if (cx(p) > 75) mem.past = true; return [{ ...walk(p, s.pressed[3] || mem.past ? 92 : 67.4), abilityPressed: !s.pressed[3] && cx(p) < 70 }, walk(sp(s), 89.5)]; },
       done: (s) => near(sg(s), 92) },
     { name: 'goal', ctrl: (s) => [walk(sg(s), 97.4), walk(sp(s), 97.8)], done: (s) => s.complete },
   ];
@@ -225,6 +226,7 @@ export function homePhases(ch) {
   const z = ch.zones.map((q) => q.x);
   const [, L, D, AT, V, SW, CL] = z;
   const both = (s, a, b) => [walk(sg(s), a), walk(sp(s), b)];
+  const mem = {};
   return [
     { name: 'home: to the door', ctrl: (s) => both(s, 11.5, 10), done: (s) => near(sg(s), 11.5) && near(sp(s), 10) },
     { name: 'home: Spice through', ctrl: (s) => both(s, 11.5, 19.5), done: (s) => near(sp(s), 19.5) },
@@ -245,7 +247,7 @@ export function homePhases(ch) {
     { name: 'home: Spice across again', ctrl: (s) => [I, walk(sp(s), AT + 13.5)], done: (s) => near(sp(s), AT + 13.5) },
     { name: 'home: Spice down', ctrl: (s) => [I, flipTo(sp(s), 1, AT + 13.5)], done: (s) => sp(s).grav > 0 && sp(s).onGround },
     { name: 'home: to the vent', ctrl: (s) => both(s, V + 5, V + 7.5), done: (s) => near(sg(s), V + 5) && near(sp(s), V + 7.5) },
-    { name: 'home: Spice rides the vent', ctrl: (s) => { const p = sp(s); if (p.y < 3) p.botHigh2 = true; return [I, { ...walk(p, p.botHigh2 ? V + 14.5 : V + 7.5), jump: true, jumpPressed: p.onGround && !p.botHigh2 }]; },
+    { name: 'home: Spice rides the vent', ctrl: (s) => { const p = sp(s); if (p.y < 3) mem.high = true; return [I, { ...walk(p, mem.high ? V + 14.5 : V + 7.5), jump: true, jumpPressed: p.onGround && !mem.high }]; },
       done: (s) => near(sp(s), V + 14.5) && feet(sp(s)) < 6.1 },
     { name: 'home: Sugar through C', ctrl: (s) => [walk(sg(s), V + 25), walk(sp(s), V + 14.5)], done: (s) => near(sg(s), V + 25) },
     { name: 'home: Spice down', ctrl: (s) => [I, walk(sp(s), V + 26)], done: (s) => near(sp(s), V + 26) },

@@ -509,6 +509,7 @@ function drawPlay() {
   ctx.save();
   if (app.shake > 0) ctx.translate((Math.random() - 0.5) * app.shake * 22, (Math.random() - 0.5) * app.shake * 22);
   drawWorld(ctx, s, app.cam, W, H, app.fx, ch.theme, app.t);
+  drawSigns(s);
   drawBubbles(s);
   ctx.restore();
   const P = textPx(H);
@@ -551,6 +552,23 @@ function drawPlay() {
     panel((W - bw) / 2, top, bw, P * 2.4 * app.toast.lines.length + P * 0.6);
     app.toast.lines.forEach(([who, text], i) => txt(text, W / 2, top + P * (1.5 + i * 2.4), { size: P, color: PLAYER_COLORS[who] }));
     ctx.globalAlpha = 1;
+  }
+}
+
+// A sign reads itself out when either of you stands near it, in your own buttons.
+function drawSigns(s) {
+  const k = app.cam.scale, P = textPx(H) * 0.82;
+  for (const e of s.ents) {
+    if (e.type !== 'sign') continue;
+    if (!s.players.some((p) => !p.dead && Math.abs(p.x + p.w / 2 - e.x - 0.5) < 2.4 && Math.abs(p.y + p.h - e.y) < 3.5)) continue;
+    const text = e.text.replace('{sugar}', labelsFor(app.devices[0]).ability).replace('{spice}', labelsFor(app.devices[1]).ability).replace('{spiceJump}', labelsFor(app.devices[1]).jump);
+    const lines = wrapLines(text, 300, P, '600');
+    ctx.font = `600 ${P}px system-ui, sans-serif`;
+    const bw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 28, bh = lines.length * P * 1.3 + 16;
+    const px = W / 2 + (e.x + 0.5 - app.cam.x) * k, py = H / 2 + (e.y - 1.3 - app.cam.y) * k;
+    const bx = Math.min(W - bw - 8, Math.max(8, px - bw / 2)), by = Math.max(8, py - bh - 6);
+    panel(bx, by, bw, bh, 'rgba(255, 248, 225, 0.96)', 10);
+    lines.forEach((l, i) => txt(l, bx + 14, by + 8 + P * 0.65 + i * P * 1.3, { size: P, color: '#5d4037', align: 'left', shadow: false, weight: '600' }));
   }
 }
 
