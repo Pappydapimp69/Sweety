@@ -3,17 +3,19 @@
 // frames is never lost. Pads are polled on their own timer, not per frame.
 import { PAD_DEADZONE, PAD_POLL_MS } from './config.js';
 
-const KEYS = {
-  kbL: { left: ['KeyA'], right: ['KeyD'], up: ['KeyW'], down: ['KeyS'], jump: ['KeyW', 'Space'], ability: ['KeyE', 'KeyF'] },
-  kbR: { left: ['ArrowLeft'], right: ['ArrowRight'], up: ['ArrowUp'], down: ['ArrowDown'], jump: ['ArrowUp'], ability: ['Enter', 'Period', 'Numpad0', 'ShiftRight'] },
+// In play, up and jump share a key on each keyboard half, so menus get their own
+// OK and Back keys and W/S and the arrows always just move the cursor.
+export const KEYS = {
+  kbL: { left: ['KeyA'], right: ['KeyD'], up: ['KeyW'], down: ['KeyS'], jump: ['KeyW', 'Space'], ability: ['KeyE', 'KeyF'], ok: ['Space', 'KeyE'], back: ['Escape', 'Backspace', 'KeyQ'] },
+  kbR: { left: ['ArrowLeft'], right: ['ArrowRight'], up: ['ArrowUp'], down: ['ArrowDown'], jump: ['ArrowUp'], ability: ['Enter', 'Period', 'Numpad0', 'ShiftRight'], ok: ['Enter', 'NumpadEnter'], back: ['Escape', 'Backspace'] },
 };
-const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'ability', 'pause'];
+const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'ability', 'pause', 'ok', 'back'];
 
 // What to call each button on screen, per device.
 export const LABELS = {
-  kbL: { move: 'A / D', jump: 'W', ability: 'E', pause: 'Esc', name: 'keyboard (left)' },
-  kbR: { move: '← / →', jump: '↑', ability: 'Enter', pause: 'Esc', name: 'keyboard (right)' },
-  pad: { move: 'left stick', jump: 'A', ability: 'X', pause: 'Start', name: 'controller' },
+  kbL: { move: 'A / D', jump: 'W', ability: 'E', pause: 'Esc', ok: 'Space', back: 'Esc', nav: 'W A S D', name: 'keyboard (left)' },
+  kbR: { move: '← / →', jump: '↑', ability: 'Enter', pause: 'Esc', ok: 'Enter', back: 'Esc', nav: 'arrows', name: 'keyboard (right)' },
+  pad: { move: 'left stick', jump: 'A', ability: 'X', pause: 'Start', ok: 'A', back: 'B', nav: 'stick', name: 'controller' },
 };
 export const labelsFor = (dev) => (dev && dev.startsWith('pad') ? LABELS.pad : LABELS[dev] || LABELS.kbL);
 
@@ -34,7 +36,7 @@ function refreshKeyboard(code, isDown) {
       const codes = a === 'pause' ? ['Escape'] : KEYS[d][a];
       if (!codes.includes(code)) continue;
       const now = codes.some((c) => down.has(c));
-      if (now && !held[d][a]) latch[d][a] = true;
+      if (now && !held[d][a]) latch[d][a] = (latch[d][a] || 0) + 1;   // count: two taps in one frame are two
       held[d][a] = now;
     }
   }
@@ -70,10 +72,10 @@ function pollPads() {
     const now = {
       left: ax < -0.4 || b(14), right: ax > 0.4 || b(15),
       up: ay < -0.5 || b(12), down: ay > 0.5 || b(13),
-      jump: b(0), ability: b(2) || b(1), pause: b(9),
+      jump: b(0), ability: b(2) || b(1), pause: b(9), ok: b(0), back: b(1) || b(8),
     };
     for (const a of ACTIONS) {
-      if (now[a] && !held[d][a]) latch[d][a] = true;
+      if (now[a] && !held[d][a]) latch[d][a] = (latch[d][a] || 0) + 1;
       held[d][a] = now[a];
     }
   }
@@ -92,15 +94,17 @@ export function read(d) {
     left: !!h.left, right: !!h.right, down: !!h.down, up: !!h.up,
     jump: !!h.jump, ability: !!h.ability,
     jumpPressed: !!l.jump, abilityPressed: !!l.ability, pausePressed: !!l.pause,
+    okPressed: !!l.ok, backPressed: !!l.back,
     leftPressed: !!l.left, rightPressed: !!l.right, upPressed: !!l.up, downPressed: !!l.down,
+    taps: { left: l.left || 0, right: l.right || 0, up: l.up || 0, down: l.down || 0 },
   };
-  for (const a of ACTIONS) l[a] = false;
+  for (const a of ACTIONS) l[a] = 0;
   return out;
 }
 
 // Drop presses made during a screen change so they don't leak into the next screen.
 export function flush() {
-  for (const d of Object.keys(latch)) for (const a of ACTIONS) latch[d][a] = false;
+  for (const d of Object.keys(latch)) for (const a of ACTIONS) latch[d][a] = 0;
 }
 
 export const ALL_DEVICES = ['kbL', 'kbR', 'pad0', 'pad1', 'pad2', 'pad3'];

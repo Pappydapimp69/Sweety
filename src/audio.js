@@ -69,6 +69,20 @@ const SFX = {
   bonk: () => tone(600, 0.15, { type: 'square', vol: 0.08, slide: -400 }),
   plate: () => tone(400, 0.06, { type: 'triangle', vol: 0.06 }),
   complete: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.3, { vol: 0.1, delay: i * 0.12 })),
+  tick: () => tone(700, 0.04, { type: 'triangle', vol: 0.05 }),
+  confirm: () => { tone(660, 0.08, { type: 'triangle', vol: 0.08 }); tone(990, 0.12, { type: 'triangle', vol: 0.07, delay: 0.06 }); },
+  flip: () => tone(500, 0.18, { type: 'triangle', vol: 0.08, slide: -300 }),
+  swap: () => { tone(880, 0.1, { vol: 0.08, slide: -400 }); tone(440, 0.12, { vol: 0.08, slide: 400, delay: 0.08 }); },
+  gust: () => tone(240, 0.3, { type: 'sawtooth', vol: 0.03, slide: 300 }),
+  blown: () => tone(360, 0.2, { type: 'triangle', vol: 0.05, slide: 200 }),
+  dash: () => tone(260, 0.12, { type: 'square', vol: 0.05, slide: 500 }),
+  glass: () => [1800, 2400, 2000].forEach((f, i) => tone(f, 0.08, { type: 'triangle', vol: 0.05, delay: i * 0.03 })),
+  pinwheel: () => tone(1000, 0.2, { type: 'triangle', vol: 0.04, slide: 300 }),
+  flood: () => tone(110, 0.8, { type: 'sine', vol: 0.12, slide: -40 }),
+  talk: () => tone(820, 0.05, { type: 'triangle', vol: 0.05 }),
+  round: () => tone(587, 0.15, { type: 'square', vol: 0.05 }),
+  pass: () => tone(784, 0.07, { type: 'square', vol: 0.05 }),
+  boom: () => tone(80, 0.6, { type: 'sawtooth', vol: 0.12, slide: -40 }),
 };
 
 export function playEvents(events) {
