@@ -8,6 +8,8 @@ import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads
 import { loadProgress, saveProgress } from './save.js';
 import { unlockAudio, playEvents, sfx, setVolumes } from './audio.js';
 import { playMusic } from './music.js';
+import { createLockstep, scheduleLocal, receive as lsReceive, advance as lsAdvance, ready as lsReady } from './lockstep.js';
+import * as net from './net.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -31,6 +33,9 @@ const app = {
   ending: 0,                // seconds before the end-of-chapter card
   creditsT: 0,
   padsSeen: 0,
+  online: null,             // { role: 'host'|'guest', code, slot, status, error, ls, partnerPaused, joinCode }
+  onlineIndex: 0,
+  toastMsg: null,
 };
 const S = () => app.progress.settings;
 
@@ -41,6 +46,11 @@ function resize() {
   canvas.style.width = `${W}px`; canvas.style.height = `${H}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
+
+const devOf = (i) => (app.online ? (i === app.online.slot ? app.devices[0] : null) : app.devices[i]);
+const localDevices = () => (app.online ? [app.devices[0]] : app.devices);
+const remoteName = (i) => (app.online && i !== app.online.slot ? 'online' : null);
+function say(msg) { app.toastMsg = { text: msg, life: 3 }; }
 
 function applyVolumes() { setVolumes({ music: S().music / 10 * 0.8, sfx: S().sfx / 10 }); }
 function save() { saveProgress(app.progress); }
@@ -71,13 +81,94 @@ function beginChapter(id) {
 
 function startRun(id) {
   const ch = chapterById(id);
-  app.run = createRun(id, { gentle: S().gentle });
+  const gentle = app.online ? !!app.online.gentle : S().gentle;
+  app.run = createRun(id, { gentle });
+  if (app.online) startLockstep();
   app.cam = makeCamera(app.run);
   snapCamera(app.cam, app.run, W, H, true);
   app.fx = []; app.bubbles = []; app.shake = 0; acc = 0; app.powers = null; app.toast = null;
   app.banner = 6;
   go('play');
   playMusic(ch.music || 'garden');
+}
+
+// ---------------------------------------------------------------- online
+
+function startLockstep() {
+  const o = app.online;
+  const r = o.round;
+  o.ls = createLockstep({ local: o.slot, host: o.role === 'host', send: (m) => net.send({ ...m, r }) });
+  o.stall = 0; o.partnerPaused = false;
+  const keep = [];
+  for (const m of o.inbox) { if (m.r === r) lsReceive(o.ls, m, app.run); else if (m.r > r) keep.push(m); }
+  o.inbox = keep;
+}
+
+function onlineStart(id) {          // host picks; both machines start the same chapter
+  const o = app.online;
+  o.round++;
+  o.gentle = S().gentle;
+  net.send({ t: 'start', id, gentle: o.gentle, round: o.round });
+  beginChapter(id);
+}
+
+function onNetData(m) {
+  const o = app.online;
+  if (!o || !m || typeof m !== 'object') return;
+  if (m.t === 'in' || m.t === 'hash' || m.t === 'state') {
+    if (o.ls && m.r === o.round) lsReceive(o.ls, m, app.run);
+    else if (m.r > o.round || !o.ls) o.inbox.push(m);
+    return;
+  }
+  if (m.t === 'hello') {
+    if (o.role === 'guest') { o.slot = 1 - m.hostSlot; o.status = 'connected'; o.hostUnlocked = m.unlocked; sfx('confirm'); }
+  } else if (m.t === 'start' && o.role === 'guest') {
+    o.round = m.round; o.gentle = m.gentle; o.ls = null;
+    beginChapter(m.id);
+  } else if (m.t === 'pause') o.partnerPaused = true;
+  else if (m.t === 'resume') o.partnerPaused = false;
+  else if (m.t === 'credits' && o.role === 'guest') go('credits');
+  else if (m.t === 'lobby' && o.role === 'guest') { app.run = null; o.ls = null; go('online'); }
+}
+
+function netHandlers() {
+  return {
+    onWaiting: () => { app.online.status = 'hosting'; },
+    onOpen: () => {
+      const o = app.online;
+      if (o.role === 'host') {
+        o.status = 'connected';
+        net.send({ t: 'hello', hostSlot: o.slot, unlocked: app.progress.unlocked });
+        sfx('confirm');
+      }
+    },
+    onData: onNetData,
+    onClose: (msg) => onlineFail(msg),
+    onError: (msg) => onlineFail(msg),
+  };
+}
+
+function onlineFail(msg) {
+  if (!app.online) return;
+  app.online.status = 'error'; app.online.error = msg; app.online.ls = null;
+  if (['play', 'ending', 'pause', 'story', 'complete', 'chapters', 'minis'].includes(app.screen)) { app.run = null; go('online'); }
+}
+
+function leaveOnline() {
+  net.leave(true);
+  app.online = null;
+  go(app.devices[0] && app.devices[1] ? 'menu' : 'menu');
+}
+
+function hostOnline() {
+  const code = net.newCode();
+  app.online = { role: 'host', code, slot: app.online?.slot ?? 0, status: 'starting', round: 0, inbox: [], error: null };
+  net.host(code, netHandlers()).catch((e) => onlineFail(e.message));
+}
+
+function joinOnline(code) {
+  app.online = { role: 'guest', code, slot: 1, status: 'joining', round: 0, inbox: [], error: null, joinCode: code };
+  net.join(code, netHandlers()).catch((e) => onlineFail(e.message));
 }
 
 function finishRun() {
@@ -98,10 +189,16 @@ function finishRun() {
 function afterComplete() {
   const id = app.run.chapterId;
   const idx = CHAPTERS.findIndex((c) => c.id === id);
-  if (idx < 0) { startRun(id); return; }              // mini-game: play again
-  if (idx === CHAPTERS.length - 1) { app.progress.seenCredits = true; save(); go('credits'); return; }
+  const startNext = app.online ? onlineStart : (i) => (CHAPTERS.some((c) => c.id === i) ? beginChapter(i) : startRun(i));
+  if (app.online && app.online.role !== 'host') return;   // the host decides what's next
+  if (idx < 0) { startNext(id); return; }              // mini-game: play again
+  if (idx === CHAPTERS.length - 1) {
+    app.progress.seenCredits = true; save();
+    if (app.online) net.send({ t: 'credits' });
+    go('credits'); return;
+  }
   app.chapterIndex = idx + 1;
-  beginChapter(CHAPTERS[idx + 1].id);
+  startNext(CHAPTERS[idx + 1].id);
 }
 
 const move = (i, by, n) => ((i + by) % n + n) % n;
@@ -112,7 +209,7 @@ const chapterLocked = (i) => i >= unlockedCount();
 // (OK / Back), never jump, so moving up can't also confirm.
 function menuInput() {
   const out = { left: 0, right: 0, up: 0, down: 0, ok: false, back: false, any: false };
-  for (const d of app.devices) {
+  for (const d of localDevices()) {
     if (!d) continue;
     const r = read(d);
     out.left += r.taps.left; out.right += r.taps.right;
@@ -130,16 +227,23 @@ function updateTitle() {
     if (!r.jumpPressed) continue;
     if (app.devices.includes(d)) {
       if (app.devices[0] && app.devices[1]) { sfx('confirm'); go('menu'); return; }
+      if (d === app.devices[0] && app.t - (app.joinedAt || 0) > 0.4) { sfx('confirm'); go('menu'); return; }   // alone: for online play
       continue;
     }
     const slot = app.devices.indexOf(null);
-    if (slot >= 0) { app.devices[slot] = d; sfx('wave'); }
+    if (slot >= 0) {
+      app.devices[slot] = d; app.joinedAt = app.t; sfx('wave');
+      if (app.pendingJoin) { const c = app.pendingJoin; app.pendingJoin = null; go('online'); joinOnline(c); return; }
+    }
   }
 }
 
+const twoHere = () => (app.devices[0] && app.devices[1]) || (app.online && app.online.status === 'connected');
+const needTwo = () => say('Two players needed: join a second controller or keyboard half on the title screen, or play online.');
 const MAIN_MENU = [
-  { label: 'Story', go: () => { app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); } },
-  { label: 'Mini-games', go: () => go('minis') },
+  { label: 'Story', go: () => { if (!twoHere()) return needTwo(); app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); } },
+  { label: 'Mini-games', go: () => { if (!twoHere()) return needTwo(); go('minis'); } },
+  { label: 'Play online', go: () => { app.onlineIndex = 0; go('online'); } },
   { label: 'Settings', go: () => { app.settingsBack = 'menu'; go('settings'); } },
   { label: 'Credits', go: () => go('credits') },
 ];
@@ -156,10 +260,10 @@ function updateChapters() {
   const m = menuInput();
   const n = CHAPTERS.length;
   app.chapterIndex = move(app.chapterIndex, m.down + m.right - m.up - m.left, n);
-  if (m.back) { go('menu'); return; }
+  if (m.back) { go(app.online ? 'online' : 'menu'); return; }
   if (m.ok) {
     if (chapterLocked(app.chapterIndex)) sfx('nope');
-    else { sfx('confirm'); beginChapter(CHAPTERS[app.chapterIndex].id); }
+    else { sfx('confirm'); if (app.online) onlineStart(CHAPTERS[app.chapterIndex].id); else beginChapter(CHAPTERS[app.chapterIndex].id); }
   }
 }
 
@@ -167,8 +271,61 @@ function updateMinis() {
   const m = menuInput();
   const n = MINIGAMES.length;
   app.miniIndex = move(app.miniIndex, m.down + m.right - m.up - m.left, n);
-  if (m.back) { go('menu'); return; }
-  if (m.ok) { sfx('confirm'); startRun(MINIGAMES[app.miniIndex].id); }
+  if (m.back) { go(app.online ? 'online' : 'menu'); return; }
+  if (m.ok) { sfx('confirm'); if (app.online) onlineStart(MINIGAMES[app.miniIndex].id); else startRun(MINIGAMES[app.miniIndex].id); }
+}
+
+function updateOnline() {
+  const o = app.online;
+  const m = menuInput();
+  if (!o || o.status === 'error') {
+    const items = onlineItems();
+    app.onlineIndex = move(app.onlineIndex, m.down - m.up, items.length);
+    const it = items[app.onlineIndex];
+    if (it.side && (m.left || m.right)) { it.side(); sfx('tick'); }
+    if (m.ok && it.go) { sfx('confirm'); it.go(); }
+    else if (m.back) { app.online = null; go('menu'); }
+    return;
+  }
+  if (o.status === 'typing') {
+    o.typed = o.typed || '';
+    const L = net.CODE_LETTERS;
+    if (m.up || m.down) {   // controller: pick letters
+      const cur = o.typed.length < 4 ? o.letter ?? 0 : 0;
+      o.letter = ((cur + m.down - m.up) % L.length + L.length) % L.length;
+    }
+    if (m.right && o.typed.length < 4) { o.typed += L[o.letter ?? 0]; o.letter = 0; }
+    if (m.left && o.typed.length) o.typed = o.typed.slice(0, -1);
+    if (m.ok && o.typed.length === 4) { joinOnline(o.typed); return; }
+    if (m.ok && o.typed.length < 4) { o.typed += L[o.letter ?? 0]; o.letter = 0; }
+    if (m.back) { app.online = null; go('online'); }
+    return;
+  }
+  if (o.status === 'connected') {
+    if (o.role === 'host') {
+      const n = 3;
+      app.onlineIndex = move(app.onlineIndex, m.down - m.up, n);
+      if (m.ok) {
+        sfx('confirm');
+        if (app.onlineIndex === 0) { app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); }
+        else if (app.onlineIndex === 1) go('minis');
+        else leaveOnline();
+      }
+    }
+    if (m.back) leaveOnline();
+    return;
+  }
+  if (m.back) leaveOnline();   // hosting / joining: cancel
+}
+
+function onlineItems() {
+  const slot = app.online?.slot ?? app.wantSlot ?? 0;
+  return [
+    { label: 'Host a game', go: () => { app.wantSlot = slot; hostOnline(); app.online.slot = slot; } },
+    { label: 'Join a game', go: () => { app.online = { role: 'guest', status: 'typing', typed: '', letter: 0, round: 0, inbox: [] }; } },
+    { label: `If I host, I play: ${NAMES[slot]}`, side: () => { app.wantSlot = 1 - slot; if (app.online) app.online.slot = app.wantSlot; } },
+    { label: 'Back', go: () => { app.online = null; go('menu'); } },
+  ];
 }
 
 const SETTINGS = [
@@ -191,7 +348,7 @@ function updateSettings() {
   if (changed) { applyVolumes(); save(); sfx('confirm'); }
   if (m.back || (m.ok && it.back)) {
     if (app.run && app.settingsBack === 'pause') {
-      app.run.gentle = S().gentle;     // gentle mode applies to the run in progress too
+      if (!app.online) app.run.gentle = S().gentle;     // gentle mode applies to the run in progress too (couch only: online both sims must agree)
       go('pause');
     } else go('menu');
   }
@@ -207,9 +364,21 @@ function updateStory() {
   }
 }
 
+function pauseItems() { return app.online ? ['Keep playing', 'Settings', 'Leave online game'] : ['Keep playing', 'Restart', 'Settings', 'Quit to menu']; }
+function resume() { go('play'); playMusic(chapterById(app.run.chapterId).music); if (app.online) net.send({ t: 'resume' }); }
 function updatePause() {
   const m = menuInput();
-  const n = 4;
+  const n = pauseItems().length;
+  if (app.online) {
+    app.pauseIndex = move(app.pauseIndex, m.down - m.up, n);
+    if (m.back || m.pause) { resume(); return; }
+    if (m.ok) {
+      if (app.pauseIndex === 0) resume();
+      else if (app.pauseIndex === 1) { app.settingsBack = 'pause'; go('settings'); }
+      else { app.run = null; leaveOnline(); }
+    }
+    return;
+  }
   app.pauseIndex = move(app.pauseIndex, m.down - m.up, n);
   if (m.back || m.pause) { go('play'); playMusic(chapterById(app.run.chapterId).music); return; }   // Start toggles
   if (m.ok) {
@@ -223,17 +392,43 @@ function updatePause() {
 function updateComplete() {
   const m = menuInput();
   if (m.ok || m.any && !m.back) afterComplete();
-  else if (m.back) { const story = CHAPTERS.some((c) => c.id === app.run.chapterId); app.run = null; go(story ? 'chapters' : 'minis'); }
+  else if (m.back) {
+    if (app.online) { if (app.online.role === 'host') net.send({ t: 'lobby' }); app.run = null; go('online'); return; }
+    const story = CHAPTERS.some((c) => c.id === app.run.chapterId); app.run = null; go(story ? 'chapters' : 'minis');
+  }
 }
 
 function updateCredits(dt) {
   app.creditsT += dt;
   const m = menuInput();
-  if ((m.any || m.back) && app.creditsT > 1.5) go('menu');
+  if ((m.any || m.back) && app.creditsT > 1.5) go(app.online ? 'online' : 'menu');
 }
 
 let acc = 0;
+function updatePlayOnline(dt) {
+  const o = app.online, ls = o.ls;
+  if (!ls) return;
+  acc += Math.min(dt, 0.25);
+  let k = 0;
+  while (acc >= DT && k < MAX_STEPS) {
+    // one local sample per tick of real time; never read the device when the
+    // lockstep can't take it (that would eat a latched jump)
+    if (ls.scheduled < ls.tick + 8) {
+      const inp = app.driver ? { ...read(app.devices[0]), ...app.driver(app.run, ls) } : read(app.devices[0]);
+      if (inp.pausePressed) { app.pauseIndex = 0; net.send({ t: 'pause' }); go('pause'); acc = 0; return; }
+      scheduleLocal(ls, inp);
+    }
+    acc -= DT; k++;
+  }
+  if (k >= MAX_STEPS) acc = 0;
+  const { run } = lsAdvance(ls, app.run, MAX_STEPS, (r) => onEvents(r.events));
+  app.run = run;
+  o.stall = lsReady(ls) ? 0 : o.stall + dt;
+  if (app.run.complete) { app.ending = app.run.mode === 'chapter' ? 1.4 : 1.8; app.screen = 'ending'; }
+}
+
 function updatePlay(dt) {
+  if (app.online) { updatePlayOnline(dt); return; }
   acc += Math.min(dt, 0.25);
   let steps = 0;
   if (app.turbo) acc = DT * app.turbo;   // browser tests: many steps per frame
@@ -298,7 +493,7 @@ function watchPowers(dt) {
   if (!app.run) return;
   const now = app.run.players.map((p) => powerOf(app.run, p));
   if (app.powers && (now[0] !== app.powers[0] || now[1] !== app.powers[1]) && app.run.mode === 'chapter') {
-    const lines = [0, 1].filter((i) => now[i] !== app.powers[i]).map((i) => [i, `${NAMES[i]}: ${POWER_NAME[now[i]] || now[i]}${now[i] === 'glide' ? '' : ` (${labelsFor(app.devices[i]).ability})`}`]);
+    const lines = [0, 1].filter((i) => now[i] !== app.powers[i]).map((i) => [i, `${NAMES[i]}: ${POWER_NAME[now[i]] || now[i]}${now[i] === 'glide' || remoteName(i) ? '' : ` (${labelsFor(devOf(i)).ability})`}`]);
     app.toast = { lines, life: 3 };
     sfx('confirm');
   }
@@ -407,8 +602,12 @@ function drawTitle() {
   }
   const ready = app.devices[0] && app.devices[1];
   const pads = connectedPads();
-  const lines = ready
+  const lines = app.pendingJoin
+    ? [`Joining your partner's online game (code ${app.pendingJoin}).`, 'Press jump on your controller or keyboard.']
+    : ready
     ? ['Both here! Either of you press jump to start.']
+    : app.devices[0]
+    ? ['Waiting for player two to press jump.', 'Playing online on your own? Press jump again to go on alone.']
     : ['Keyboard left half: jump is W  ·  right half: jump is ↑  ·  controller: jump is A',
        pads ? `${pads} controller${pads > 1 ? 's' : ''} found. Press A on yours to join.` : 'Controllers: press any button first so the browser can see them.'];
   lines.forEach((l, i) => txt(l, W / 2, H * 0.8 + i * textPx(H) * 1.6, { size: textPx(H) * (i ? 0.75 : 0.9), color: '#3c096c', shadow: false, weight: i ? '500' : '700' }));
@@ -460,6 +659,53 @@ function drawMinis() {
   softBackground('#ffd6a5', '#fdffb6');
   cards(MINIGAMES.map((c) => ({ kicker: 'Mini-game', name: c.name, tagline: c.tagline })), app.miniIndex, 'Mini-games', 'Just for fun. Loser makes the tea.');
   navHint();
+}
+
+function drawOnline() {
+  softBackground('#a2d2ff', '#ffafcc');
+  const P = textPx(H);
+  const o = app.online;
+  txt('Play online', W / 2, H * 0.12, { size: P * 2 });
+  txt('Each of you on your own computer, anywhere.', W / 2, H * 0.12 + P * 1.9, { size: P * 0.85, color: '#3c096c', shadow: false, weight: '600' });
+  const L = labelsFor(app.devices[0]);
+  if (!o || o.status === 'error') {
+    if (o && o.error) txt(o.error, W / 2, H * 0.27, { size: P * 0.9, color: '#c92a2a', shadow: false, weight: '600' });
+    menuList(onlineItems().map((i) => i.label), W / 2, H * 0.38, app.onlineIndex, P);
+    hint(`move: ${L.nav}  ·  ok: ${L.ok}  ·  back: ${L.back}`);
+    return;
+  }
+  if (o.status === 'typing') {
+    txt('Type your partner\'s code', W / 2, H * 0.32, { size: P * 1.2, color: '#3c096c', shadow: false });
+    const shown = (o.typed || '') + (o.typed.length < 4 ? net.CODE_LETTERS[o.letter ?? 0].toLowerCase() : '');
+    for (let i = 0; i < 4; i++) {
+      const x = W / 2 + (i - 1.5) * P * 4;
+      panel(x - P * 1.6, H * 0.42, P * 3.2, P * 4, i === (o.typed || '').length ? '#ffffff' : 'rgba(255,255,255,0.7)', 12);
+      txt((shown[i] || '').toUpperCase(), x, H * 0.42 + P * 2, { size: P * 2.6, color: i < (o.typed || '').length ? '#3c096c' : '#adb5bd', shadow: false });
+    }
+    hint(`keyboard: type the letters, ${L.ok} to join  ·  controller: up/down picks a letter, right adds it  ·  back: ${L.back}`);
+    return;
+  }
+  if (o.status === 'starting' || o.status === 'hosting') {
+    txt('Your code', W / 2, H * 0.3, { size: P * 1.1, color: '#3c096c', shadow: false });
+    txt(o.code, W / 2, H * 0.42, { size: P * 4.5, color: '#ffffff' });
+    const link = `${location.origin}${location.pathname}?join=${o.code}`;
+    txt('Tell your partner the code, or send them this link:', W / 2, H * 0.56, { size: P * 0.85, color: '#3c096c', shadow: false, weight: '600' });
+    txt(link, W / 2, H * 0.62, { size: P * 0.85, color: '#5a189a', shadow: false, weight: '700' });
+    txt(o.status === 'hosting' ? `Waiting for your partner… you play ${NAMES[o.slot]}` : 'Opening a room…', W / 2, H * 0.74, { size: P, color: '#3c096c', shadow: false });
+    hint(`back: ${L.back}`);
+    return;
+  }
+  if (o.status === 'joining') {
+    txt(`Joining ${o.code}…`, W / 2, H * 0.45, { size: P * 1.6, color: '#3c096c', shadow: false });
+    hint(`back: ${L.back}`);
+    return;
+  }
+  // connected
+  couple(W / 2, H * 0.42, Math.min(110, H * 0.14));
+  txt(`Connected! You are ${NAMES[o.slot]}.`, W / 2, H * 0.5, { size: P * 1.3, color: '#3c096c', shadow: false });
+  if (o.role === 'host') menuList(['Story', 'Mini-games', 'Leave'], W / 2, H * 0.6, app.onlineIndex, P);
+  else txt(`${NAMES[1 - o.slot]} is choosing what to play…`, W / 2, H * 0.62, { size: P, color: '#5a189a', shadow: false });
+  hint(o.role === 'host' ? `move: ${L.nav}  ·  ok: ${L.ok}  ·  back: ${L.back} (leave)` : `back: ${L.back} (leave)`);
 }
 
 function drawSettings() {
@@ -527,12 +773,17 @@ function drawPlay() {
   // each player's buttons, in their own corner, named for their own device
   ctx.fillStyle = 'rgba(15, 10, 30, 0.6)'; ctx.fillRect(0, H - 22 - P * 0.75, W, P * 1.5);
   for (let i = 0; i < 2; i++) {
-    const L = labelsFor(app.devices[i]);
+    const L = labelsFor(devOf(i));
     const power = powerOf(s, s.players[i]);
-    const line = `${NAMES[i]}: move ${L.move} · jump ${L.jump} · ${POWER_NAME[power] || power}${power === 'glide' ? '' : ` ${L.ability}`}`;
+    const line = remoteName(i) ? `${NAMES[i]} (online) · ${POWER_NAME[power] || power}` : `${NAMES[i]}: move ${L.move} · jump ${L.jump} · ${POWER_NAME[power] || power}${power === 'glide' ? '' : ` ${L.ability}`}`;
     txt(line, i ? W - 16 : 16, H - 22, { align: i ? 'right' : 'left', size: P * 0.72, color: PLAYER_COLORS[i], weight: '600' });
   }
   txt(`pause: ${labelsFor(app.devices[0]).pause}`, W / 2, H - 22, { size: P * 0.65, color: 'rgba(255,255,255,0.7)', weight: '500' });
+  if (app.online && (app.online.stall > 0.8 || app.online.partnerPaused) && app.screen === 'play') {
+    const who = NAMES[1 - app.online.slot];
+    panel(W / 2 - 220, H * 0.42, 440, P * 2.6, 'rgba(20,16,40,0.8)');
+    txt(app.online.partnerPaused ? `${who} paused the game` : `Waiting for ${who}…`, W / 2, H * 0.42 + P * 1.3, { size: P * 1.1 });
+  }
 
   const top = s.mode === 'chapter' ? H * 0.1 : H * 0.2;
   if (app.banner > 0) {
@@ -543,7 +794,7 @@ function drawPlay() {
     txt(ch.tagline, W / 2, top + P * 2.8, { size: P * 0.9, color: '#ffd6e0', weight: '500' });
     ch.tips.forEach((tip, i) => {
       const who = tip.startsWith('Spice') ? 1 : 0;
-      txt(fillTokens(tip, app.devices[who]), W / 2, top + P * (4.4 + i * 1.5), { size: P * 0.78, weight: '500', color: tip.startsWith('Spice') ? PLAYER_COLORS[1] : tip.startsWith('Sugar') ? PLAYER_COLORS[0] : '#fff' });
+      txt(fillTokens(tip, devOf(who)), W / 2, top + P * (4.4 + i * 1.5), { size: P * 0.78, weight: '500', color: tip.startsWith('Spice') ? PLAYER_COLORS[1] : tip.startsWith('Sugar') ? PLAYER_COLORS[0] : '#fff' });
     });
     ctx.globalAlpha = 1;
   } else if (app.toast && app.toast.life > 0) {
@@ -561,7 +812,8 @@ function drawSigns(s) {
   for (const e of s.ents) {
     if (e.type !== 'sign') continue;
     if (!s.players.some((p) => !p.dead && Math.abs(p.x + p.w / 2 - e.x - 0.5) < 2.4 && Math.abs(p.y + p.h - e.y) < 3.5)) continue;
-    const text = e.text.replace('{sugar}', labelsFor(app.devices[0]).ability).replace('{spice}', labelsFor(app.devices[1]).ability).replace('{spiceJump}', labelsFor(app.devices[1]).jump);
+    const ab = (i) => (remoteName(i) ? 'their power button' : labelsFor(devOf(i)).ability);
+    const text = e.text.replace('{sugar}', ab(0)).replace('{spice}', ab(1)).replace('{spiceJump}', remoteName(1) ? 'jump' : labelsFor(devOf(1)).jump);
     const lines = wrapLines(text, 300, P, '600');
     ctx.font = `600 ${P}px system-ui, sans-serif`;
     const bw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 28, bh = lines.length * P * 1.3 + 16;
@@ -598,7 +850,7 @@ function drawPause() {
   ctx.fillStyle = 'rgba(10, 8, 25, 0.6)'; ctx.fillRect(0, 0, W, H);
   const P = textPx(H);
   txt('Paused', W / 2, H * 0.24, { size: P * 2 });
-  menuList(['Keep playing', 'Restart', 'Settings', 'Quit to menu'], W / 2, H * 0.4, app.pauseIndex, P);
+  menuList(pauseItems(), W / 2, H * 0.4, app.pauseIndex, P);
 }
 
 function drawComplete() {
@@ -618,7 +870,8 @@ function drawComplete() {
   txt('You did it together!', W / 2, H * 0.44, { size: P * 2.4 });
   if (s.heartsTotal) txt(`♥ ${s.hearts} of ${s.heartsTotal} hearts`, W / 2, H * 0.54, { size: P * 1.2, color: '#d6336c' });
   const last = s.chapterId === CHAPTERS[CHAPTERS.length - 1].id;
-  txt(`${L.ok}: ${last ? 'the end' : 'next chapter'}  ·  ${L.back}: chapters`, W / 2, H * 0.66, { size: P });
+  if (app.online && app.online.role !== 'host') txt(`Waiting for ${NAMES[1 - app.online.slot]} to go on…`, W / 2, H * 0.66, { size: P });
+  else txt(`${L.ok}: ${last ? 'the end' : 'next chapter'}  ·  ${L.back}: ${app.online ? 'online lobby' : 'chapters'}`, W / 2, H * 0.66, { size: P });
 }
 
 const CREDITS = [
@@ -673,7 +926,17 @@ function frame(now) {
     case 'pause': updatePause(); if (app.screen === 'pause') drawPause(); break;
     case 'complete': updateComplete(); if (app.screen === 'complete') drawComplete(); break;
     case 'credits': updateCredits(dt); if (app.screen === 'credits') drawCredits(); break;
+    case 'online': updateOnline(); if (app.screen === 'online') drawOnline(); break;
     default: break;
+  }
+  if (app.toastMsg && app.toastMsg.life > 0) {
+    app.toastMsg.life -= dt;
+    const P = textPx(H);
+    ctx.globalAlpha = Math.min(1, app.toastMsg.life);
+    const lines = wrapLines(app.toastMsg.text, Math.min(640, W - 60), P * 0.9, '600');
+    panel(W / 2 - Math.min(340, W / 2 - 10), H * 0.84 - P, Math.min(680, W - 20), lines.length * P * 1.3 + P, 'rgba(20,16,40,0.85)');
+    lines.forEach((l, i) => txt(l, W / 2, H * 0.84 - P * 0.1 + i * P * 1.3, { size: P * 0.9, weight: '600' }));
+    ctx.globalAlpha = 1;
   }
   if (app.fade > 0) {
     ctx.fillStyle = `rgba(255, 240, 246, ${Math.min(1, app.fade)})`; ctx.fillRect(0, 0, W, H);
@@ -693,6 +956,16 @@ resize();
 window.addEventListener('resize', resize);
 window.addEventListener('blur', () => { if (app.screen === 'play') { app.pauseIndex = 0; go('pause'); } });
 initInput(window);
+window.addEventListener('keydown', (e) => {
+  const o = app.online;
+  if (app.screen !== 'online' || !o || o.status !== 'typing') return;
+  const ch = e.key.length === 1 ? e.key.toUpperCase() : '';
+  if (net.CODE_LETTERS.includes(ch) && o.typed.length < 4) { o.typed += ch; flush(); }
+  else if (e.key === 'Backspace') { o.typed = o.typed.slice(0, -1); flush(); }
+});
+// A link with ?join=CODE goes straight to joining after the first player joins.
+const joinParam = new URLSearchParams(location.search).get('join');
+if (joinParam && /^[A-Z]{4}$/i.test(joinParam)) app.pendingJoin = joinParam.toUpperCase();
 onAnyKey(() => { unlockAudio(); applyVolumes(); });
 window.addEventListener('pointerdown', () => { unlockAudio(); applyVolumes(); });
 applyVolumes();
@@ -703,6 +976,9 @@ requestAnimationFrame(frame);
 window.__sweety = {
   app,
   join: (a = 'kbL', b = 'kbR') => { app.devices = [a, b]; go('menu'); },
+  host: () => { go('online'); hostOnline(); },
+  joinCode: (c) => { go('online'); joinOnline(c); },
+  net,
   start: (id) => startRun(id),
   begin: (id) => beginChapter(id),
 };
