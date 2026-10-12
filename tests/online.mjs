@@ -93,6 +93,12 @@ try {
   await A.keyboard.down('KeyD'); await B.keyboard.down('ArrowRight'); await A.waitForTimeout(1500); await A.keyboard.up('KeyD'); await B.keyboard.up('ArrowRight');
   const t2 = await Promise.all([A, B].map((P) => P.evaluate(() => window.__sweety.app.run.tick)));
   check(t2[0] > 60 && t2[1] > 60, `round two runs on both sides (ticks ${t2})`);
+  // the host restarts the chapter for both from the pause menu
+  await A.keyboard.press('Escape'); await A.waitForTimeout(200);
+  await A.keyboard.press('KeyS'); await A.waitForTimeout(100);   // the host plays on the left half: S is down
+  await A.keyboard.press('Space'); await A.waitForTimeout(800);
+  const r3 = await Promise.all([A, B].map((P) => P.evaluate(() => [window.__sweety.app.screen, window.__sweety.app.online.round, window.__sweety.app.run?.chapterId, window.__sweety.app.run?.tick])));
+  check(r3.every((x) => x[0] === 'play' && x[1] === 3 && x[2] === 'toolbox' && x[3] < 80), `host's Restart restarts both (${JSON.stringify(r3)})`);
   // guest leaves: host is told
   await B.evaluate(() => window.__sweety.net.leave());
   check(await until(A, () => window.__sweety.app.online?.status === 'error'), 'host notices the partner left');

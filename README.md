@@ -35,7 +35,7 @@ buttons appear the first time you touch the screen, so each of you can play
 online from a phone or tablet. Hold it sideways. If a
 controller unplugs mid-chapter, the game pauses.
 
-## The story (7 chapters, about an hour together)
+## The story (7 chapters, 30–60 minutes the first time through)
 | | Chapter | Sugar | Spice |
 |---|---|---|---|
 | 1 | The Garden | none: plates, doors, bridges, a shoulder to stand on | none |
@@ -58,7 +58,8 @@ you straight back where you last stood), and screen shake.
 ## Online
 Menu → **Play online**. One of you picks **Host a game** and gets a four-letter
 code and a link. The other opens the link (or picks **Join a game** and types
-the code). The host picks what to play. It needs an internet connection: the
+the code). The host picks what to play, and can restart a chapter for both of
+you from the pause menu. It needs an internet connection: the
 two browsers find each other through the free PeerJS broker, then talk
 directly.
 

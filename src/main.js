@@ -130,13 +130,13 @@ function startLockstep() {
   o.inbox = keep;
 }
 
-function onlineStart(id) {          // host picks; both machines start the same chapter
+function onlineStart(id, restart = false) {   // host picks; both machines start the same chapter
   const o = app.online;
   o.round++;
   o.gentle = S().gentle;
   o.ls = null;   // the last round's lockstep must not swallow this round's inputs
-  net.send({ t: 'start', id, gentle: o.gentle, round: o.round });
-  beginChapter(id);
+  net.send({ t: 'start', id, gentle: o.gentle, round: o.round, restart });
+  if (restart) startRun(id); else beginChapter(id);
 }
 
 function onNetData(m) {
@@ -151,7 +151,7 @@ function onNetData(m) {
     if (o.role === 'guest') { o.slot = 1 - m.hostSlot; o.status = 'connected'; o.hostUnlocked = m.unlocked; sfx('confirm'); }
   } else if (m.t === 'start' && o.role === 'guest') {
     o.round = m.round; o.gentle = m.gentle; o.ls = null;
-    beginChapter(m.id);
+    if (m.restart) startRun(m.id); else beginChapter(m.id);
   } else if (m.t === 'pause') o.partnerPaused = true;
   else if (m.t === 'resume') o.partnerPaused = false;
   else if (m.t === 'credits' && o.role === 'guest') go('credits');
@@ -391,7 +391,10 @@ function updateStory() {
   }
 }
 
-function pauseItems() { return app.online ? ['Keep playing', 'Settings', 'Leave online game'] : ['Keep playing', 'Restart', 'Settings', 'Quit to menu']; }
+function pauseItems() {
+  if (!app.online) return ['Keep playing', 'Restart', 'Settings', 'Quit to menu'];
+  return app.online.role === 'host' ? ['Keep playing', 'Restart (both of you)', 'Settings', 'Leave online game'] : ['Keep playing', 'Settings', 'Leave online game'];
+}
 function pauseGame() {
   if (app.screen !== 'play') return;
   app.pauseIndex = 0;
@@ -406,8 +409,10 @@ function updatePause() {
     app.pauseIndex = move(app.pauseIndex, m.down - m.up, n);
     if (m.back || m.pause) { resume(); return; }
     if (m.ok) {
-      if (app.pauseIndex === 0) resume();
-      else if (app.pauseIndex === 1) { app.settingsBack = 'pause'; go('settings'); }
+      const item = pauseItems()[app.pauseIndex];
+      if (item === 'Keep playing') resume();
+      else if (item.startsWith('Restart')) onlineStart(app.run.chapterId, true);
+      else if (item === 'Settings') { app.settingsBack = 'pause'; go('settings'); }
       else { app.run = null; leaveOnline(); }
     }
     return;
