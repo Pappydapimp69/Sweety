@@ -68,12 +68,13 @@ two browsers find each other through the free PeerJS broker, then talk
 directly.
 
 ## Develop
-- `npm test`: the pure suite (about 90 tests). It covers:
+- `npm test`: the pure suite (about 120 tests, around 10 s). It covers:
   - level lint and physics for every power
   - scripted bots that play **every chapter** through
   - solo negative controls proving each co-op gate needs both players
   - a check that the renderer never touches game state
   - online lockstep, replaying a whole chapter through two laggy peers
+  - a seeded button-mashing fuzzer on every level, also started from mid-route states (no NaN, nobody stuck in a wall, deterministic)
   - keys named per device
   - music
 - `node tests/browser.mjs [dir]`: the real page in Chromium. It walks the menus with the keyboard, then the bots play all 7 chapters to the credits, with screenshots.
