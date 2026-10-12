@@ -68,8 +68,8 @@ const t_crates = sec(16, [
 ], [{ type: 'sign', x: 1, text: 'Spice: jump, then {spice} in the air to slam through the crates.' }]);
 const t_pins = sec(16, [
   ...sky(6), '............h', '............1', '........########', '........########',
-  '........########', '........A', '........A', ground(16),
-], [{ type: 'sign', x: 2, text: 'Sugar: jump and press {sugar} to pin the wall. Only Spice can stand on pins.' }]);
+  '........########', '...##...A', '...##...A', ground(16),
+], [{ type: 'sign', x: 1, text: 'Sugar: stand on the step, face the wall and press {sugar} to pin it. Only Spice can stand on pins.' }]);
 const t_launch = sec(20, [
   ...sky(5), '..............h', '...............2', '............########',
   '............########', '............########', '............########',
