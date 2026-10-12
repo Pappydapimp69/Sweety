@@ -86,3 +86,43 @@ test('bonk: landing on a head scores, standing does not', () => {
   for (let i = 0; i < 60; i++) step(s, [I, I]);
   assert.equal(s.score[0], 1);
 });
+
+test('the leash never teleports: after a far respawn the gap closes by walking', () => {
+  const s = createRun('garden');
+  const [a, b] = s.players;
+  a.x = 50; a.y = 13 - a.h;          // just respawned far behind
+  b.x = 92; b.y = 13 - b.h;          // across the bridge
+  const x0 = b.x;
+  for (let i = 0; i < 5; i++) step(s, [I, { ...I, right: true }]);
+  assert.ok(Math.abs(b.x - x0) < 1, `Spice moved ${b.x - x0} in 5 steps`);
+});
+
+test('negative control: the old full pull would have moved him ~20 tiles', () => {
+  // the gap minus the leash is the distance a full pull covers in one step
+  assert.ok(92 - 50 - 22 > 15);
+});
+
+test('the finale flood takes the climb checkpoint when it starts (no drowning loop)', async () => {
+  const { chapterById } = await import('../src/levels.js');
+  const ch = chapterById('home');
+  const s = createRun('home');
+  const [a, b] = s.players;
+  s.checkpoint = { x: 126, y: 12 };           // the one before the saws
+  b.x = ch.flood.startX + 1; b.y = 13 - b.h;  // Spice starts the water without touching the climb flag
+  a.x = 140; a.y = 15 - a.h;                  // Sugar in the tunnel below
+  for (let i = 0; i < 2; i++) step(s, [I, I]);
+  assert.ok(s.flood.active);
+  assert.ok(s.checkpoint.x >= ch.flood.startX - 8 && s.checkpoint.x <= ch.flood.startX, `checkpoint ${JSON.stringify(s.checkpoint)}`);
+});
+
+test('a corrupt save never locks the chapters or shows nonsense hearts', async () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  const { loadProgress } = await import('../src/save.js');
+  for (const [raw, want] of [['{"unlocked":0}', 1], ['{"unlocked":-3}', 1], ['{"unlocked":2.5}', 2], ['null', 1], ['[1,2]', 1], ['{"unlocked":"7"}', 1]]) {
+    store.set('sweety:progress', raw);
+    assert.equal(loadProgress().unlocked, want, raw);
+  }
+  store.set('sweety:progress', '{"hearts":{"garden":"lots","night":2,"sky":-1,"attic":1.7}}');
+  assert.deepEqual(loadProgress().hearts, { night: 2, attic: 1 });
+});

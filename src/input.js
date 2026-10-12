@@ -129,6 +129,11 @@ function pollPads() {
   }
 }
 
+export function padConnected(i) {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  return !!(pads[i] && pads[i].connected);
+}
+
 export function connectedPads() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   return [...pads].filter((g) => g && g.connected).length;

@@ -66,7 +66,12 @@ try {
   check(await until(B, () => window.__sweety.app.screen === 'story'), 'guest is pulled into the chapter intro');
   for (const [P, key] of [[A, 'Space'], [B, 'Enter']]) for (let i = 0; i < 3; i++) { await P.keyboard.press(key); await P.waitForTimeout(150); }
   check(await until(A, () => window.__sweety.app.screen === 'play') && await until(B, () => window.__sweety.app.screen === 'play'), 'both in play');
-  await A.waitForTimeout(3000);
+  // how often would "Waiting for..." show while both are playing?
+  const shown = await Promise.all([A, B].map((P) => P.evaluate(() => new Promise((res) => {
+    let n = 0, on = 0;
+    const iv = setInterval(() => { const o = window.__sweety.app.online; n++; if (o && o.stall > 0.8) on++; if (n >= 150) { clearInterval(iv); res(on / n); } }, 20);
+  }))));
+  check(shown[0] < 0.1 && shown[1] < 0.1, `"Waiting for..." rarely shows while both play (${shown.map((x) => (x * 100).toFixed(0) + '%')})`);
   await shot(A, '32-online-play-host'); await shot(B, '33-online-play-guest');
   const fin = await until(A, () => window.__sweety.app.run?.complete || ['story', 'complete'].includes(window.__sweety.app.screen), 120000)
     && await until(B, () => window.__sweety.app.run?.complete || ['story', 'complete'].includes(window.__sweety.app.screen), 30000);
@@ -75,6 +80,19 @@ try {
   check(fa === fb, `identical worlds at the end (${fa} vs ${fb})`);
   const rs = await Promise.all([A, B].map((P) => P.evaluate(() => window.__sweety.app.online.ls?.resyncs ?? 0)));
   check(rs[0] + rs[1] === 0, `no resyncs needed (${rs})`);
+  // round two: the host goes on, the guest skips the next intro first (this used to deadlock)
+  await A.evaluate(() => { window.__sweety.app.driver = null; }); await B.evaluate(() => { window.__sweety.app.driver = null; });
+  await until(A, () => ['story', 'complete'].includes(window.__sweety.app.screen)); await until(B, () => ['story', 'complete'].includes(window.__sweety.app.screen));
+  for (let i = 0; i < 8 && await A.evaluate(() => window.__sweety.app.screen) !== 'complete'; i++) { await A.keyboard.press('Space'); await A.waitForTimeout(150); }
+  for (let i = 0; i < 8 && await B.evaluate(() => window.__sweety.app.screen) === 'story'; i++) { await B.keyboard.press('Enter'); await B.waitForTimeout(150); }
+  await A.keyboard.press('Space');
+  check(await until(B, () => window.__sweety.app.screen === 'story' && window.__sweety.app.online.round === 2), 'host goes on to chapter 2; guest follows');
+  for (let i = 0; i < 4 && await B.evaluate(() => window.__sweety.app.screen) === 'story'; i++) { await B.keyboard.press('Enter'); await B.waitForTimeout(150); }
+  await A.waitForTimeout(1500);
+  for (let i = 0; i < 4 && await A.evaluate(() => window.__sweety.app.screen) === 'story'; i++) { await A.keyboard.press('Space'); await A.waitForTimeout(150); }
+  await A.keyboard.down('KeyD'); await B.keyboard.down('ArrowRight'); await A.waitForTimeout(1500); await A.keyboard.up('KeyD'); await B.keyboard.up('ArrowRight');
+  const t2 = await Promise.all([A, B].map((P) => P.evaluate(() => window.__sweety.app.run.tick)));
+  check(t2[0] > 60 && t2[1] > 60, `round two runs on both sides (ticks ${t2})`);
   // guest leaves: host is told
   await B.evaluate(() => window.__sweety.net.leave());
   check(await until(A, () => window.__sweety.app.online?.status === 'error'), 'host notices the partner left');

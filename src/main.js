@@ -4,7 +4,7 @@ import { DT, MAX_STEPS } from './config.js';
 import { CHAPTERS, MINIGAMES, STORY, chapterById } from './levels.js';
 import { createRun, step, NAMES, powerOf } from './sim.js';
 import { drawWorld, drawCharacter, snapCamera, makeCamera, textPx, PLAYER_COLORS, heart } from './render.js';
-import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads, initTouch, setTouchLayout, touchSeen } from './input.js';
+import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads, padConnected, initTouch, setTouchLayout, touchSeen } from './input.js';
 import { loadProgress, saveProgress } from './save.js';
 import { unlockAudio, playEvents, sfx, setVolumes } from './audio.js';
 import { playMusic } from './music.js';
@@ -134,6 +134,7 @@ function onlineStart(id) {          // host picks; both machines start the same 
   const o = app.online;
   o.round++;
   o.gentle = S().gentle;
+  o.ls = null;   // the last round's lockstep must not swallow this round's inputs
   net.send({ t: 'start', id, gentle: o.gentle, round: o.round });
   beginChapter(id);
 }
@@ -177,7 +178,7 @@ function netHandlers() {
 function onlineFail(msg) {
   if (!app.online) return;
   app.online.status = 'error'; app.online.error = msg; app.online.ls = null;
-  if (['play', 'ending', 'pause', 'story', 'complete', 'chapters', 'minis'].includes(app.screen)) { app.run = null; go('online'); }
+  if (['play', 'ending', 'pause', 'settings', 'story', 'complete', 'chapters', 'minis', 'credits'].includes(app.screen)) { app.run = null; go('online'); }
 }
 
 function leaveOnline() {
@@ -391,6 +392,12 @@ function updateStory() {
 }
 
 function pauseItems() { return app.online ? ['Keep playing', 'Settings', 'Leave online game'] : ['Keep playing', 'Restart', 'Settings', 'Quit to menu']; }
+function pauseGame() {
+  if (app.screen !== 'play') return;
+  app.pauseIndex = 0;
+  if (app.online) net.send({ t: 'pause' });
+  go('pause');
+}
 function resume() { go('play'); playMusic(chapterById(app.run.chapterId).music); if (app.online) net.send({ t: 'resume' }); }
 function updatePause() {
   const m = menuInput();
@@ -419,7 +426,7 @@ function updateComplete() {
   const m = menuInput();
   if (m.ok || m.any && !m.back) afterComplete();
   else if (m.back) {
-    if (app.online) { if (app.online.role === 'host') net.send({ t: 'lobby' }); app.run = null; go('online'); return; }
+    if (app.online) { if (app.online.role === 'host') net.send({ t: 'lobby' }); app.run = null; app.online.ls = null; go('online'); return; }
     const story = CHAPTERS.some((c) => c.id === app.run.chapterId); app.run = null; go(story ? 'chapters' : 'minis');
   }
 }
@@ -433,7 +440,7 @@ function updateCredits(dt) {
 let acc = 0;
 function updatePlayOnline(dt) {
   const o = app.online, ls = o.ls;
-  if (!ls) return;
+  if (!ls) { if (o.status !== 'connected') go('online'); return; }
   acc += Math.min(dt, 0.25);
   let k = 0;
   while (acc >= DT && k < MAX_STEPS) {
@@ -441,15 +448,15 @@ function updatePlayOnline(dt) {
     // lockstep can't take it (that would eat a latched jump)
     if (ls.scheduled < ls.tick + 8) {
       const inp = app.driver ? { ...read(app.devices[0]), ...app.driver(app.run, ls) } : read(app.devices[0]);
-      if (inp.pausePressed) { app.pauseIndex = 0; net.send({ t: 'pause' }); go('pause'); acc = 0; return; }
-      scheduleLocal(ls, inp);
+      scheduleLocal(ls, inp);   // the tick's jump still counts if pause was pressed with it
+      if (inp.pausePressed) { pauseGame(); acc = 0; return; }
     }
     acc -= DT; k++;
   }
   if (k >= MAX_STEPS) acc = 0;
-  const { run } = lsAdvance(ls, app.run, MAX_STEPS, (r) => onEvents(r.events));
+  const { run, n } = lsAdvance(ls, app.run, MAX_STEPS, (r) => onEvents(r.events));
   app.run = run;
-  o.stall = lsReady(ls) ? 0 : o.stall + dt;
+  o.stall = n > 0 || lsReady(ls) ? 0 : o.stall + dt;   // waiting only if nothing ran this frame
   if (app.run.complete) { app.ending = app.run.mode === 'chapter' ? 1.4 : 1.8; app.screen = 'ending'; }
 }
 
@@ -460,9 +467,9 @@ function updatePlay(dt) {
   if (app.turbo) acc = DT * app.turbo;   // browser tests: many steps per frame
   while (acc >= DT && steps < (app.turbo || MAX_STEPS)) {
     const inputs = app.driver ? app.driver(app.run) : app.devices.map((d) => read(d));
-    if (inputs.some((i) => i.pausePressed)) { app.pauseIndex = 0; go('pause'); acc = 0; return; }
-    step(app.run, inputs);
+    step(app.run, inputs);   // run the tick first: the partner's jump pressed with the pause still counts
     onEvents(app.run.events);
+    if (inputs.some((i) => i.pausePressed)) { pauseGame(); acc = 0; return; }
     acc -= DT; steps++;
     if (app.run.complete) { app.ending = app.run.mode === 'chapter' ? 1.4 : 1.8; app.screen = 'ending'; return; }
   }
@@ -974,14 +981,15 @@ function frame(now) {
 
 // A controller dropping out mid-chapter pauses instead of leaving a character running.
 function watchPads() {
-  const n = connectedPads();
-  if (n < app.padsSeen && app.screen === 'play' && app.devices.some((d) => d && d.startsWith('pad'))) { app.pauseIndex = 0; go('pause'); }
-  app.padsSeen = n;
+  // only a pad someone is playing on counts
+  const lost = localDevices().some((d) => d && d.startsWith('pad') && !padConnected(+d.slice(3)));
+  if (lost && !app.padLost) pauseGame();
+  app.padLost = lost;
 }
 
 resize();
 window.addEventListener('resize', resize);
-window.addEventListener('blur', () => { if (app.screen === 'play') { app.pauseIndex = 0; go('pause'); } });
+window.addEventListener('blur', () => pauseGame());
 initInput(window);
 initTouch(canvas);
 window.addEventListener('keydown', (e) => {

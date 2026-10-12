@@ -629,9 +629,10 @@ function leash(s, dxs) {
   if (over <= 0) return;
   const dir = Math.sign(gap);   // +1: b is right of a
   const awayA = -dir * dxs[0] > 0, awayB = dir * dxs[1] > 0;
-  if (awayA && awayB) { moveX(s, a, dir * over / 2); moveX(s, b, -dir * over / 2); }
-  else if (awayA) moveX(s, a, dir * over);
-  else if (awayB) moveX(s, b, -dir * over);
+  // undo at most this step's own movement: after a respawn the gap can be huge, and
+  // pulling the whole overshoot at once would carry someone through walls
+  if (awayA) moveX(s, a, dir * Math.min(over, Math.abs(dxs[0])));
+  if (awayB) moveX(s, b, -dir * Math.min(over, Math.abs(dxs[1])));
 }
 
 function updateShots(s) {
@@ -659,7 +660,13 @@ function updateGusts(s) {
 
 function updateFlood(s) {
   const f = s.flood;
-  if (!f.active && s.players.some((p) => p.x > f.startX)) { f.active = true; s.events.push({ type: 'flood' }); }
+  if (!f.active && s.players.some((p) => p.x > f.startX)) {
+    f.active = true;
+    s.events.push({ type: 'flood' });
+    // the climb's own checkpoint counts from the moment the water starts, so a
+    // partner left behind comes back above the water, not under it
+    for (let x = f.startX; x > f.startX - 8; x--) for (let y = 0; y < s.h; y++) if (s.grid[y][x] === '!') { s.checkpoint = { x, y }; x = -1; break; }
+  }
   if (!f.active) return;
   f.y = Math.max(f.stopY, f.y - f.speed * C.DT);
   for (const p of s.players) {
