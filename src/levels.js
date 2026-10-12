@@ -59,8 +59,8 @@ const g_step = sec(10, [...sky(9), '....h', '', '...###', '...###', '######^^^#'
 const g_door = sec(14, [...sky(10, '.......#'), '.......A', '.......A', '...1...A...1', ground(14)], [{ type: 'sign', x: 1, text: 'Stand on a plate to hold the door of its colour open for your partner.' }]);
 const g_stack = sec(16, [
   ...sky(7), '............h', '.........2', '......##########',
-  '......B', '......B', '......B', ground(16),
-], [{ type: 'sign', x: 2, text: 'Too high? One stands still, the other jumps on their head.' }, { type: 'talk', x: 3, id: 'garden1' }]);
+  '......B', '......B', '......B......2', ground(16),
+], [{ type: 'sign', x: 2, text: 'Too high? One stands still, the other jumps on their head. Up top, stand on the switch.' }, { type: 'talk', x: 3, id: 'garden1' }]);
 const g_pit = sec(20, [
   ...sky(9), '.........h', '', '....##...##...##', '....##...##...##',
   '##^^##^^^##^^^##^^##', ground(20),
@@ -92,16 +92,16 @@ const t_pins = sec(16, [
 const t_launch = sec(20, [
   ...sky(5), '..............h', '...............2', '............########',
   '............########', '............########', '............########',
-  '............B', '............B', '####LL###LL#########', ground(20),
+  '............B', '............B.....2', '####LL###LL#########', ground(20),
 ], [{ type: 'sign', x: 1, text: 'Sugar waits on the far pad. Spice slams the near one ({spice} in the air).' }, { type: 'talk', x: 2, id: 'toolbox1' }]);
 
 // Two pins make a ladder; the high one needs Sugar on Spice's shoulders. His switch lifts her up.
-const t_lift = named('lift', sec(18, [
+const t_lift = named('lift', sec(20, [
   ...sky(5), '...............h', '.............4', '..........########', '..........########',
-  '..........########', '..........########', '....##....########', '....##....########', ground(18),
+  '..........########', '..........########', '....##....########', '....##....########.4', ground(20),
 ], [
   { type: 'platform', w: 2, path: [[8, 13], [8, 6.8]], period: 5, g: 4, look: 'plank' },   // tops out just above the ledge, so you step off, not into it
-  { type: 'sign', x: 1, text: 'Two pins make a ladder. For the high one, Sugar stands on Spice\'s shoulders.' },
+  { type: 'sign', x: 1, text: 'Two pins make a ladder. For the high one, Sugar stands on Spice\'s shoulders. Up top, Spice\'s switch runs the lift for her.' },
 ]));
 
 // ---------- Chapter 3: The Night — Sugar's lantern, Spice shrinks and grows ----------
@@ -163,8 +163,8 @@ const s_cloud = sec(24, [
 const s_vent = sec(22, [
   ...sky(4), '.......h', '..............2', '..........############', '..........############',
   '..........############', '..........############', '..........############',
-  '..........B', '..........B', '#######V##############', ground(22),
-], [{ type: 'sign', x: 4, text: 'Vents lift Spice while he glides.' }]);
+  '..........B', '..........B.......2', '#######V##############', ground(22),
+], [{ type: 'sign', x: 4, text: 'Vents lift Spice while he glides. Up top, his switch opens the door for Sugar.' }]);
 const s_wheel = sec(26, [
   ...sky(10, '........#'), '........C', '........C', '........C',
   '###########dddddddddddd###', pit(26, 11, 3),
@@ -176,7 +176,7 @@ s_wheel[9] = '........#.........h.......';
 
 // Vent to vent over a long drop; then Spice holds the switch for Sugar's cloud.
 const s_vents2 = named('vents2', sec(26, [
-  ...sky(9), '............h', '', '', '........................1.', '###....................###',
+  ...sky(9), '............h', '', '', '.......................1..', '###....................###',
   '###.....V.......V.....###', '###.....#.......#.....###',
 ], [
   { type: 'platform', w: 3, path: [[3, 13], [20, 13]], period: 9, g: 1, look: 'cloud' },
@@ -190,7 +190,7 @@ const c_saws = sec(22, [
   '#A##################..', '#.....................', '#....................#', ground(22),
 ], [
   ...[6.5, 9.5, 12.5].map((x) => ({ type: 'saw', path: [[x, 10.55], [x, 12.45]], period: 1.2, r: 0.5 })),
-  { type: 'talk', x: 0, id: 'clock1' }, { type: 'sign', x: 1, text: 'Sugar: hold {sugar} to stop the saws while they are up.' }]);
+  { type: 'talk', x: 0, id: 'clock1' }, { type: 'sign', x: 1, text: 'Sugar: hold {sugar} to stop the saws while they are up. Then Spice\'s switch opens a hatch under Sugar.' }]);
 const c_bob = sec(24, [
   ...sky(10), '...........h', '', '......................2',
   '##bbbbbbbbbbbbbbbbbbbb##', pit(24, 2, 2),
@@ -210,7 +210,7 @@ const c_stairs = named('stairs', sec(20, [
   '###...........######', '###...........######',
 ], [
   { type: 'platform', w: 2, path: [[4, 13], [4, 9.5]], period: 3, g: 4, stop: true, look: 'gear' },
-  { type: 'platform', w: 2, path: [[7.5, 11], [7.5, 7.5]], period: 3, g: 4, stop: true, look: 'gear' },
+  { type: 'platform', w: 2, path: [[7.5, 11], [7.5, 7.5]], period: 3, phase: 0.5, g: 4, stop: true, look: 'gear' },   // swings against the others: a staircase only mid-swing
   { type: 'platform', w: 2, path: [[11, 9], [11, 5.5]], period: 3, g: 4, stop: true, look: 'gear' },
   { type: 'sign', x: 1, text: 'Stop the gears when they make a staircase ({sugar}). Up top, a switch stops them for Sugar.' },
 ]));
@@ -219,7 +219,7 @@ const c_stairs = named('stairs', sec(20, [
 const h_door = sec(14, [...sky(10, '.......#'), '.......A', '.......A', '...1...A...1', ground(14)], [{ type: 'talk', x: 1, id: 'home1' }]);
 const h_launch = sec(20, [
   ...sky(6), '...............2', '............########', '............########',
-  '............########', '............########', '............B', '............B',
+  '............########', '............########', '............B', '............B.....2',
   '####LL###LL#########', ground(20),
 ]);
 const h_dark = sec(20, [
@@ -230,7 +230,7 @@ const h_attic = sec(16, [...roof(16), ...Array(9).fill(''), '####^^^^^^^^####', 
 const h_vent = sec(22, [
   ...sky(5), '..............3', '..........############', '..........############',
   '..........############', '..........############', '..........############',
-  '..........C', '..........C', '#######V##############', ground(22),
+  '..........C', '..........C.......3', '#######V##############', ground(22),
 ]);
 const h_saws = sec(22, [
   ...sky(10, '...##############'), '................%', '................%', '................%.4...',

@@ -9,7 +9,7 @@ export const DELAY = 4;           // ticks of input delay (~67 ms) that hides la
 export const HASH_EVERY = 120;
 export const KEEP = 900;          // input history kept for re-simulating after a resync
 
-const BITS = ['left', 'right', 'down', 'jump', 'ability', 'jumpPressed', 'abilityPressed'];
+const BITS = ['left', 'right', 'down', 'jump', 'ability', 'jumpPressed', 'abilityPressed', 'regroup'];
 export const packInput = (i) => BITS.reduce((m, k, b) => m | (i[k] ? 1 << b : 0), 0);
 export function unpackInput(m) {
   const o = {};

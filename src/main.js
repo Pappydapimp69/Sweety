@@ -391,9 +391,12 @@ function updateStory() {
   }
 }
 
+// "Back to checkpoint" brings BOTH of you back to the last flag: the way out of
+// any spot where one of you is stranded. It travels as an input, so online works too.
 function pauseItems() {
-  if (!app.online) return ['Keep playing', 'Restart', 'Settings', 'Quit to menu'];
-  return app.online.role === 'host' ? ['Keep playing', 'Restart (both of you)', 'Settings', 'Leave online game'] : ['Keep playing', 'Settings', 'Leave online game'];
+  const back = app.run && app.run.mode === 'chapter' ? ['Back to checkpoint (both)'] : [];
+  if (!app.online) return ['Keep playing', ...back, 'Restart', 'Settings', 'Quit to menu'];
+  return app.online.role === 'host' ? ['Keep playing', ...back, 'Restart (both of you)', 'Settings', 'Leave online game'] : ['Keep playing', ...back, 'Settings', 'Leave online game'];
 }
 function pauseGame() {
   if (app.screen !== 'play') return;
@@ -405,12 +408,14 @@ function resume() { go('play'); playMusic(chapterById(app.run.chapterId).music);
 function updatePause() {
   const m = menuInput();
   const n = pauseItems().length;
+  if (!app.online) app.pauseIndex = move(app.pauseIndex, 0, n);
   if (app.online) {
     app.pauseIndex = move(app.pauseIndex, m.down - m.up, n);
     if (m.back || m.pause) { resume(); return; }
     if (m.ok) {
       const item = pauseItems()[app.pauseIndex];
       if (item === 'Keep playing') resume();
+      else if (item.startsWith('Back to checkpoint')) { app.regroup = true; resume(); }
       else if (item.startsWith('Restart')) onlineStart(app.run.chapterId, true);
       else if (item === 'Settings') { app.settingsBack = 'pause'; go('settings'); }
       else { app.run = null; leaveOnline(); }
@@ -420,9 +425,11 @@ function updatePause() {
   app.pauseIndex = move(app.pauseIndex, m.down - m.up, n);
   if (m.back || m.pause) { go('play'); playMusic(chapterById(app.run.chapterId).music); return; }   // Start toggles
   if (m.ok) {
-    if (app.pauseIndex === 0) { go('play'); playMusic(chapterById(app.run.chapterId).music); }
-    else if (app.pauseIndex === 1) startRun(app.run.chapterId);
-    else if (app.pauseIndex === 2) { app.settingsBack = 'pause'; go('settings'); }
+    const item = pauseItems()[app.pauseIndex];
+    if (item === 'Keep playing') resume();
+    else if (item.startsWith('Back to checkpoint')) { app.regroup = true; resume(); }
+    else if (item === 'Restart') startRun(app.run.chapterId);
+    else if (item === 'Settings') { app.settingsBack = 'pause'; go('settings'); }
     else { const story = CHAPTERS.some((c) => c.id === app.run.chapterId); app.run = null; go(story ? 'chapters' : 'minis'); }
   }
 }
@@ -453,6 +460,7 @@ function updatePlayOnline(dt) {
     // lockstep can't take it (that would eat a latched jump)
     if (ls.scheduled < ls.tick + 8) {
       const inp = app.driver ? { ...read(app.devices[0]), ...app.driver(app.run, ls) } : read(app.devices[0]);
+      if (app.regroup) { inp.regroup = true; app.regroup = false; }
       scheduleLocal(ls, inp);   // the tick's jump still counts if pause was pressed with it
       if (inp.pausePressed) { pauseGame(); acc = 0; return; }
     }
@@ -472,6 +480,7 @@ function updatePlay(dt) {
   if (app.turbo) acc = DT * app.turbo;   // browser tests: many steps per frame
   while (acc >= DT && steps < (app.turbo || MAX_STEPS)) {
     const inputs = app.driver ? app.driver(app.run) : app.devices.map((d) => read(d));
+    if (app.regroup) { inputs[0] = { ...inputs[0], regroup: true }; app.regroup = false; }
     step(app.run, inputs);   // run the tick first: the partner's jump pressed with the pause still counts
     onEvents(app.run.events);
     if (inputs.some((i) => i.pausePressed)) { pauseGame(); acc = 0; return; }
@@ -832,7 +841,7 @@ function drawPlay() {
     txt(ch.tagline, W / 2, top + P * 2.8, { size: P * 0.9, color: '#ffd6e0', weight: '500' });
     ch.tips.forEach((tip, i) => {
       const who = tip.startsWith('Spice') ? 1 : 0;
-      txt(fillTokens(tip, devOf(who)), W / 2, top + P * (4.4 + i * 1.5), { size: P * 0.78, weight: '500', color: tip.startsWith('Spice') ? PLAYER_COLORS[1] : tip.startsWith('Sugar') ? PLAYER_COLORS[0] : '#fff' });
+      txt(remoteName(who) ? tip.replace('{ability}', 'their power button').replace('{jump}', 'jump') : fillTokens(tip, devOf(who)), W / 2, top + P * (4.4 + i * 1.5), { size: P * 0.78, weight: '500', color: tip.startsWith('Spice') ? PLAYER_COLORS[1] : tip.startsWith('Sugar') ? PLAYER_COLORS[0] : '#fff' });
     });
     ctx.globalAlpha = 1;
   } else if (app.toast && app.toast.life > 0) {

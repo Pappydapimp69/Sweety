@@ -89,6 +89,7 @@ export function drawWorld(ctx, s, cam, W, H, fx, theme = 'day', t = s.time) {
 
   if (lightRadius(s)) drawNight(ctx, s, W, H, k, sx, sy);
 
+  drawTether(ctx, s, sx, sy, k);
   for (const p of s.players) drawPlayer(ctx, s, p, sx, sy, k, t);
   if (s.mode === 'potato' && s.holder >= 0) drawPotato(ctx, s, sx, sy, k, t);
 
@@ -351,6 +352,28 @@ function drawNight(ctx, s, W, H, k, sx, sy) {
     d.beginPath(); d.arc(cx, cy, R, 0, Math.PI * 2); d.fill();
   }
   ctx.drawImage(dark, 0, 0);
+}
+
+// The leash made visible: a dotted heart-string appears as you two drift apart.
+function drawTether(ctx, s, sx, sy, k) {
+  if (s.mode !== 'chapter') return;
+  const [a, b] = s.players;
+  if (a.dead || b.dead) return;
+  const gap = Math.abs((a.x + a.w / 2) - (b.x + b.w / 2));
+  if (gap < 18) return;
+  const strain = Math.min(1, (gap - 18) / 6);
+  ctx.save();
+  ctx.globalAlpha = 0.25 + strain * 0.6;
+  ctx.strokeStyle = strain > 0.9 ? '#ff4d6d' : '#ffb3c1';
+  ctx.lineWidth = Math.max(2, k * 0.06);
+  ctx.setLineDash([k * 0.25, k * 0.25]);
+  ctx.beginPath();
+  ctx.moveTo(sx(a.x + a.w / 2), sy(a.y + a.h / 2));
+  ctx.lineTo(sx(b.x + b.w / 2), sy(b.y + b.h / 2));
+  ctx.stroke();
+  ctx.setLineDash([]);
+  heart(ctx, (sx(a.x + a.w / 2) + sx(b.x + b.w / 2)) / 2, (sy(a.y + a.h / 2) + sy(b.y + b.h / 2)) / 2, k * 0.22, '#ff4d6d');
+  ctx.restore();
 }
 
 function drawFlood(ctx, s, W, H, sy, t) {

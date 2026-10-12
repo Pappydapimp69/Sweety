@@ -106,14 +106,14 @@ test('a saw kills; gentle mode puts you back where you stood, fast', () => {
   for (const gentle of [false, true]) {
     const s = createRun(map(open(), { sugar: 'none', spice: 'none' }, { ents }), { gentle });
     const a = s.players[0];
-    let died = 0, back = -1;
-    run(s, 120, (s, i) => {
-      if (a.dead) died++;
+    let died = 0, diedAt = -1, back = -1;
+    run(s, 160, (s, i) => {
+      if (a.dead) { died++; if (diedAt < 0) diedAt = i; }
       if (died && !a.dead && back < 0) back = i;
       return [{ ...I, right: !died }, I];
     });
     assert.ok(died > 0);
-    if (gentle) assert.ok(back < 40 && cx(a) > 4, `gentle: back in ${back} steps at ${cx(a)}`);
+    if (gentle) assert.ok(back - diedAt < 30 && cx(a) > 4 && !a.dead, `gentle: back in ${back - diedAt} steps at ${cx(a)}`);
     else assert.ok(cx(a) < 3, 'normal: back at the start');
   }
 });

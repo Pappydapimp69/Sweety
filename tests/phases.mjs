@@ -255,7 +255,7 @@ export function skyPhases() {
     { name: 'line up at the pinwheel', ctrl: (s) => [walk(sg(s), 67.4), walk(sp(s), 72.5)], done: (s) => near(sg(s), 67.4, 0.2) && near(sp(s), 72.5) && sg(s).facing > 0 },
     { name: 'Sugar spins it, Spice through C', ctrl: (s) => [{ ...I, abilityPressed: !s.pressed[3] && sg(s).cool <= 0 }, walk(sp(s), 76.3)], done: (s) => near(sp(s), 76.3) },
     { name: 'Spice glides the pit', ctrl: (s) => { const p = sp(s); return [I, { ...I, right: cx(p) < 89.5, jump: true, jumpPressed: p.onGround && cx(p) < 77 }]; },
-      done: (s) => near(sp(s), 89.5, 0.6), max: 600 },
+      done: (s) => sp(s).onGround && cx(sp(s)) > 88.6, max: 600 },
     { name: 'Spice on plate 4', ctrl: (s) => [I, walk(sp(s), 89.5)], done: (s) => near(sp(s), 89.5) },
     { name: 'Sugar spins it again and runs', ctrl: (s) => { const p = sg(s); if (cx(p) > 75) mem.past = true; return [{ ...walk(p, s.pressed[3] || mem.past ? 92 : 67.4), abilityPressed: !s.pressed[3] && cx(p) < 70 }, walk(sp(s), 89.5)]; },
       done: (s) => near(sg(s), 92) },
@@ -274,12 +274,12 @@ function skyMore() {
       const p = sp(s);
       if (mem.stage === 0 && cx(p) > V + 7.5 && p.y < 3) mem.stage = 1;
       if (mem.stage === 1 && cx(p) > V + 15.5 && p.y < 3) mem.stage = 2;
-      const tx = [V + 8.5, V + 16.5, V + 24.5][mem.stage];
+      const tx = [V + 8.5, V + 16.5, V + 23.5][mem.stage];
       return [I, { ...walk(p, tx), jump: true, jumpPressed: p.onGround && cx(p) < V + 4 }];
     }, done: (s) => sp(s).onGround && cx(sp(s)) > V + 23, max: 1500 },
-    { name: 'vents: Spice on the switch, Sugar on the cloud', ctrl: (s) => [cloud(s).x < V + 3.5 ? walk(sg(s), V + 4.5) : I, walk(sp(s), V + 24.5)],
-      done: (s) => near(sp(s), V + 24.5) && sg(s).ride === cloud(s).i, max: 1500 },
-    { name: 'vents: Sugar rides over', ctrl: (s) => [cloud(s).x > V + 19.5 ? walk(sg(s), V + 23.4) : I, walk(sp(s), V + 24.5)], done: (s) => near(sg(s), V + 23.4), max: 1500 },
+    { name: 'vents: Spice on the switch, Sugar on the cloud', ctrl: (s) => [cloud(s).x < V + 3.5 ? walk(sg(s), V + 4.5) : I, walk(sp(s), V + 23.5)],
+      done: (s) => near(sp(s), V + 23.5) && sg(s).ride === cloud(s).i, max: 1500 },
+    { name: 'vents: Sugar rides over', ctrl: (s) => [cloud(s).x > V + 19.5 ? walk(sg(s), V + 23.4) : I, walk(sp(s), V + 23.5)], done: (s) => near(sg(s), V + 23.4), max: 1500 },
   ];
 }
 

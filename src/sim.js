@@ -87,7 +87,7 @@ function makePlayer(id, ch) {
     onGround: false, coyote: 0, jumpBuf: 0, standOn: -1, ride: -1,
     slamming: false, launched: false, bright: false, freezing: false, gliding: false,
     stun: 0, cool: 0, pushT: 0, dashT: 0, airUsed: false,
-    dead: false, deadT: 0, prevY: 0, wave: 0, safe: null, landT: 0,
+    dead: false, deadT: 0, prevY: 0, wave: 0, safe: null, landT: 0, safeCandidate: false,
   };
 }
 
@@ -305,6 +305,10 @@ export function step(s, inputs) {
   if (s.complete) return s;
   s.tick++;
   s.time = s.tick * C.DT;
+  if (s.mode === 'chapter' && inputs.some((i) => i && i.regroup)) {
+    for (const p of s.players) { p.grav = 1; placeAtSpawn(s, p); }
+    s.events.push({ type: 'regroup' });
+  }
   s.pressed = computePressed(s);
   s.held = heldDoors(s);
   s.frozen = s.players.some((p) => p.freezing && !p.dead);
@@ -336,6 +340,8 @@ export function step(s, inputs) {
   updateGusts(s);
   if (s.flood) updateFlood(s);
   for (const p of s.players) touch(s, p);
+  // only a place you survived counts as safe (spikes are checked first)
+  for (const p of s.players) { if (p.safeCandidate && !p.dead) noteSafe(s, p); p.safeCandidate = false; }
   for (const e of s.ents) if (e.type === 'talk' && !s.talked.includes(e.id) && s.players.some((p) => !p.dead && p.x + p.w / 2 >= e.x)) {
     s.talked.push(e.id);
     s.events.push({ type: 'talk', id: e.id });
@@ -472,7 +478,7 @@ function updatePlayer(s, p, inp) {
     if (s.bonk && p.standOn >= 0 && vyBefore >= C.BONK_MIN_VY) bonk(s, p, s.players[p.standOn]);
     else if (p.slamming) slamLand(s, p);
     else if (!wasGround && Math.abs(vyBefore) > 8) { p.landT = 0.12; s.events.push({ type: 'land', who: p.id, x: p.x + p.w / 2, y: p.grav > 0 ? p.y + p.h : p.y, hard: Math.abs(vyBefore) > 18 }); }
-    if (p.standOn < 0 && p.ride < 0) noteSafe(s, p);
+    p.safeCandidate = p.standOn < 0 && p.ride < 0;   // recorded after hazards are checked this step
   }
   return dx;
 }
@@ -628,7 +634,8 @@ function leash(s, dxs) {
   const over = Math.abs(gap) - C.LEASH_X;
   if (over <= 0) return;
   const dir = Math.sign(gap);   // +1: b is right of a
-  const awayA = -dir * dxs[0] > 0, awayB = dir * dxs[1] > 0;
+  // a player in the air is never stopped: that would drop them into a pit mid-glide
+  const awayA = -dir * dxs[0] > 0 && a.onGround, awayB = dir * dxs[1] > 0 && b.onGround;
   // undo at most this step's own movement: after a respawn the gap can be huge, and
   // pulling the whole overshoot at once would carry someone through walls
   if (awayA) moveX(s, a, dir * Math.min(over, Math.abs(dxs[0])));
@@ -696,7 +703,7 @@ function touch(s, p) {
         s.hearts++;
         s.events.push({ type: 'heart', who: p.id, x: cx + 0.5, y: cy + 0.5 });
       } else if (t === '!') {
-        if (!s.checkpoint || s.checkpoint.x !== cx || s.checkpoint.y !== cy) {
+        if (!s.checkpoint || cx > s.checkpoint.x) {   // forward only: walking back over an old flag keeps the newer one
           s.checkpoint = { x: cx, y: cy };
           s.events.push({ type: 'checkpoint', x: cx + 0.5, y: cy + 0.5 });
         }

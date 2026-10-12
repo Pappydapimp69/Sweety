@@ -52,6 +52,10 @@ Hearts are hidden in each chapter.
 **Mini-games:** Bonk! (land on their head), Heart Rain (catch the most),
 Hot Potato (don't be holding it).
 
+**Stuck?** Pause → **Back to checkpoint** brings you both back to the last
+flag. It works online too. Every door you hold open for your partner also has
+a switch on the far side, so whoever got through can let the other one in.
+
 **Settings:** music and sound volume, **gentle mode** (spikes and falls put
 you straight back where you last stood), and screen shake.
 

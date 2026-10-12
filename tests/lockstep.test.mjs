@@ -41,7 +41,7 @@ function pair({ latency = 6, jitter = 4, seed = 1 } = {}) {
 
 test('input packing round-trips', () => {
   const i = { ...NO_INPUT, right: true, jumpPressed: true, ability: true };
-  assert.deepEqual(unpackInput(packInput(i)), { ...NO_INPUT, right: true, jumpPressed: true, ability: true });
+  assert.deepEqual(unpackInput(packInput({ ...i, regroup: true })), { ...NO_INPUT, right: true, jumpPressed: true, ability: true, regroup: true });
 });
 
 // Record a full offline play-through's inputs, then replay them through two

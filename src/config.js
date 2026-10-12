@@ -32,7 +32,7 @@ export const LIGHT_R = 3.5;
 export const LIGHT_R_BRIGHT = 6;
 
 export const RESPAWN = 1.0;
-export const LEASH_X = 22;         // max horizontal gap between the two
+export const LEASH_X = 24;         // max horizontal gap between the two (the camera zooms out to frame it)
 
 export const BONK_WIN = 5;
 export const BONK_MIN_VY = 3;      // falling at least this fast to count
