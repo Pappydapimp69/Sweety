@@ -4,7 +4,7 @@ import { DT, MAX_STEPS } from './config.js';
 import { CHAPTERS, MINIGAMES, STORY, chapterById } from './levels.js';
 import { createRun, step, NAMES, powerOf } from './sim.js';
 import { drawWorld, drawCharacter, snapCamera, makeCamera, textPx, PLAYER_COLORS, heart } from './render.js';
-import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads } from './input.js';
+import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads, initTouch, setTouchLayout, touchSeen } from './input.js';
 import { loadProgress, saveProgress } from './save.js';
 import { unlockAudio, playEvents, sfx, setVolumes } from './audio.js';
 import { playMusic } from './music.js';
@@ -39,12 +39,38 @@ const app = {
 };
 const S = () => app.progress.settings;
 
+// On-screen buttons for touch: a d-pad on the left, A and B on the right, pause top-right.
+function touchLayout() {
+  const r = Math.max(26, Math.min(W, H) * 0.075);
+  const pad = r * 1.25, by = H - pad - r * 1.0;   // clear of the hint bar at the bottom
+  return [
+    { act: 'left', x: pad, y: by, r }, { act: 'right', x: pad + r * 2.3, y: by, r },
+    { act: 'up', x: pad + r * 1.15, y: by - r * 1.6, r: r * 0.8 }, { act: 'down', x: pad + r * 1.15, y: by + r * 0.05 + r * 0.9, r: r * 0.55 },
+    { act: 'a', x: W - pad, y: by - r * 0.6, r: r * 1.1 }, { act: 'b', x: W - pad - r * 2.4, y: by + r * 0.1, r },
+    { act: 'pause', x: W / 2, y: r * 0.8, r: r * 0.55 },   // top centre: the corners hold the HUD
+  ];
+}
+const TOUCH_GLYPH = { left: '◀', right: '▶', up: '▲', down: '▼', a: 'A', b: 'B', pause: 'II' };
+function drawTouch() {
+  if (!touchSeen && !app.devices.includes('touch')) return;
+  for (const b of touchLayout()) {
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    txt(TOUCH_GLYPH[b.act], b.x, b.y, { size: b.r * 0.8, color: 'rgba(255,255,255,0.9)', shadow: false });
+  }
+  if (H > W) {   // a phone held upright: the world is tiny
+    panel(W * 0.1, H * 0.06, W * 0.8, textPx(H) * 2.4, 'rgba(20,16,40,0.8)');
+    txt('Turn your phone sideways ↻', W / 2, H * 0.06 + textPx(H) * 1.2, { size: textPx(H) });
+  }
+}
+
 function resize() {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   W = window.innerWidth; H = window.innerHeight;
   canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
   canvas.style.width = `${W}px`; canvas.style.height = `${H}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  setTouchLayout(touchLayout());
 }
 
 const devOf = (i) => (app.online ? (i === app.online.slot ? app.devices[0] : null) : app.devices[i]);
@@ -608,7 +634,7 @@ function drawTitle() {
     ? ['Both here! Either of you press jump to start.']
     : app.devices[0]
     ? ['Waiting for player two to press jump.', 'Playing online on your own? Press jump again to go on alone.']
-    : ['Keyboard left half: jump is W  ·  right half: jump is ↑  ·  controller: jump is A',
+    : ['Keyboard left half: jump is W  ·  right half: jump is ↑  ·  controller or touch screen: A',
        pads ? `${pads} controller${pads > 1 ? 's' : ''} found. Press A on yours to join.` : 'Controllers: press any button first so the browser can see them.'];
   lines.forEach((l, i) => txt(l, W / 2, H * 0.8 + i * textPx(H) * 1.6, { size: textPx(H) * (i ? 0.75 : 0.9), color: '#3c096c', shadow: false, weight: i ? '500' : '700' }));
 }
@@ -929,6 +955,7 @@ function frame(now) {
     case 'online': updateOnline(); if (app.screen === 'online') drawOnline(); break;
     default: break;
   }
+  drawTouch();
   if (app.toastMsg && app.toastMsg.life > 0) {
     app.toastMsg.life -= dt;
     const P = textPx(H);
@@ -956,6 +983,7 @@ resize();
 window.addEventListener('resize', resize);
 window.addEventListener('blur', () => { if (app.screen === 'play') { app.pauseIndex = 0; go('pause'); } });
 initInput(window);
+initTouch(canvas);
 window.addEventListener('keydown', (e) => {
   const o = app.online;
   if (app.screen !== 'online' || !o || o.status !== 'typing') return;

@@ -28,8 +28,11 @@ Each player presses **jump** on their own device to join.
 | keyboard, left half | A / D | W | E | Space / Esc | Esc |
 | keyboard, right half | ← / → | ↑ | Enter | Enter / Esc | Esc |
 | controller | left stick | A | X | A / B | Start |
+| touch screen | ◀ ▶ on screen | A | B | A / B | II |
 
-Controllers: press any button first so the browser can see them. If a
+Controllers: press any button first so the browser can see them. Touch
+buttons appear the first time you touch the screen, so each of you can play
+online from a phone or tablet. Hold it sideways. If a
 controller unplugs mid-chapter, the game pauses.
 
 ## The story (7 chapters, about an hour together)
@@ -71,4 +74,5 @@ directly.
 - `node tests/browser.mjs [dir]`: the real page in Chromium. It walks the menus with the keyboard, then the bots play all 7 chapters to the credits, with screenshots.
 - `node tests/gamepad.mjs`: two emulated controllers covering join, menus, stick deadzone and unplug-pauses.
 - `node tests/online.mjs [dir]`: two browsers play a chapter online through the real broker.
+- `node tests/touch.mjs [dir]`: real multi-touch events. Hold ▶ with one finger and tap A with another.
 - Design notes: `docs/blueprint.md`.

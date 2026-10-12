@@ -17,6 +17,7 @@ export const LABELS = {
   kbR: { move: '← / →', jump: '↑', ability: 'Enter', pause: 'Esc', ok: 'Enter', back: 'Esc', nav: 'arrows', name: 'keyboard (right)' },
   pad: { move: 'left stick', jump: 'A', ability: 'X', pause: 'Start', ok: 'A', back: 'B', nav: 'stick', name: 'controller' },
 };
+LABELS.touch = { move: '◀ ▶', jump: 'A', ability: 'B', pause: 'II', ok: 'A', back: 'B', nav: '◀ ▶ ▲ ▼', name: 'touch screen' };
 export const labelsFor = (dev) => (dev && dev.startsWith('pad') ? LABELS.pad : LABELS[dev] || LABELS.kbL);
 
 const down = new Set();
@@ -59,6 +60,53 @@ export function initInput(target = window) {
 }
 
 export function onAnyKey(fn) { anyKeyHook = fn; }
+
+// ---- touch: on-screen buttons. main.js lays them out (CSS px) and draws them;
+// here each finger is tracked to the button it is on, so a thumb can hold
+// ▶ while the other taps A.
+let touchButtons = [];          // [{ act: 'left'|'right'|'up'|'down'|'a'|'b'|'pause', x, y, r }]
+const fingers = new Map();      // pointerId -> act
+export let touchSeen = false;
+export function setTouchLayout(buttons) { touchButtons = buttons; }
+const TOUCH_MAP = { left: ['left'], right: ['right'], up: ['up'], down: ['down'], a: ['jump', 'ok'], b: ['ability', 'back'], pause: ['pause'] };
+
+function touchAt(x, y) {
+  let best = null, bd = Infinity;
+  for (const b of touchButtons) {
+    const d = Math.hypot(x - b.x, y - b.y);
+    if (d < b.r * 1.35 && d < bd) { best = b.act; bd = d; }   // generous capture
+  }
+  return best;
+}
+function refreshTouch() {
+  const d = dev('touch');
+  const on = new Set();
+  for (const act of fingers.values()) if (act) for (const a of TOUCH_MAP[act]) on.add(a);
+  for (const a of ACTIONS) {
+    const now = on.has(a);
+    if (now && !held[d][a]) latch[d][a] = (latch[d][a] || 0) + 1;
+    held[d][a] = now;
+  }
+}
+export function initTouch(target) {
+  const isTouch = (e) => e.pointerType === 'touch' || e.pointerType === 'pen';
+  target.addEventListener('pointerdown', (e) => {
+    if (!isTouch(e)) return;
+    touchSeen = true;
+    e.preventDefault();
+    fingers.set(e.pointerId, touchAt(e.clientX, e.clientY));
+    refreshTouch();
+    if (anyKeyHook) anyKeyHook();
+  });
+  target.addEventListener('pointermove', (e) => {
+    if (!isTouch(e) || !fingers.has(e.pointerId)) return;
+    fingers.set(e.pointerId, touchAt(e.clientX, e.clientY));   // slide between buttons
+    refreshTouch();
+  });
+  const up = (e) => { if (fingers.delete(e.pointerId)) refreshTouch(); };
+  target.addEventListener('pointerup', up);
+  target.addEventListener('pointercancel', up);
+}
 
 function pollPads() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -107,4 +155,4 @@ export function flush() {
   for (const d of Object.keys(latch)) for (const a of ACTIONS) latch[d][a] = 0;
 }
 
-export const ALL_DEVICES = ['kbL', 'kbR', 'pad0', 'pad1', 'pad2', 'pad3'];
+export const ALL_DEVICES = ['kbL', 'kbR', 'pad0', 'pad1', 'pad2', 'pad3', 'touch'];
