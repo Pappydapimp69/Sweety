@@ -1,14 +1,34 @@
 // Tiny synthesized sound effects. Fire-and-forget: never await resume() (some
 // browsers leave it pending forever), cap concurrent voices.
 let ctx = null;
+let sfxBus = null, musicBus = null;
 let voices = 0;
 const MAX_VOICES = 16;
+const vol = { sfx: 0.8, music: 0.6 };
+const unlockHooks = [];
 
 export function unlockAudio() {
   try {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      sfxBus = ctx.createGain(); sfxBus.gain.value = vol.sfx; sfxBus.connect(ctx.destination);
+      musicBus = ctx.createGain(); musicBus.gain.value = vol.music; musicBus.connect(ctx.destination);
+      for (const f of unlockHooks) f();
+    }
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   } catch { ctx = null; }
+}
+
+// For music.js: the shared context and its bus (null until a user gesture).
+export const audioCtx = () => ctx;
+export const musicOut = () => musicBus;
+export function onAudioReady(f) { if (ctx) f(); else unlockHooks.push(f); }
+
+export function setVolumes({ sfx, music }) {
+  if (Number.isFinite(sfx)) vol.sfx = sfx;
+  if (Number.isFinite(music)) vol.music = music;
+  if (sfxBus) sfxBus.gain.setTargetAtTime(vol.sfx, ctx.currentTime, 0.05);
+  if (musicBus) musicBus.gain.setTargetAtTime(vol.music, ctx.currentTime, 0.05);
 }
 
 function tone(freq, dur, { type = 'sine', vol = 0.15, slide = 0, delay = 0 } = {}) {
@@ -22,7 +42,7 @@ function tone(freq, dur, { type = 'sine', vol = 0.15, slide = 0, delay = 0 } = {
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(ctx.destination);
+    o.connect(g).connect(sfxBus);
     voices++;
     o.onended = () => { voices--; o.disconnect(); g.disconnect(); };
     o.start(t); o.stop(t + dur + 0.02);
