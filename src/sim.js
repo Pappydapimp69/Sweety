@@ -200,7 +200,7 @@ export function solidTile(s, cx, cy) {
   if (SOLID_BASE.includes(t)) return true;
   if (t >= 'A' && t <= 'D') return !doorOpen(s, cx, cy);
   if (t >= 'a' && t <= 'd') return s.pressed[bridgeGroup(t)];
-  if (t === '~') return isLit(s, cx, cy);
+  if (t === '~') return isLit(s, cx, cy) && !s.held.includes(cy * s.w + cx);
   return false;
 }
 
@@ -385,7 +385,7 @@ function heldDoors(s) {
     for (let cy = Math.floor(p.y + EPS); cy <= Math.floor(p.y + p.h - EPS); cy++)
       for (let cx = Math.floor(p.x + EPS); cx <= Math.floor(p.x + p.w - EPS); cx++) {
         const t = tileAt(s, cx, cy);
-        if (t >= 'A' && t <= 'D' && overlapsCell(p, cx, cy)) out.push(cy * s.w + cx);
+        if (((t >= 'A' && t <= 'D') || t === '~') && overlapsCell(p, cx, cy)) out.push(cy * s.w + cx);   // doors and lantern stones never close on anyone
       }
   }
   return out;
