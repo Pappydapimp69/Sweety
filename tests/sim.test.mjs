@@ -176,3 +176,16 @@ test('checkpoints only move forward', () => {
   for (let i = 0; i < 5; i++) step(s, [I, I]);
   assert.equal(s.checkpoint.x, ahead);
 });
+
+test('standing on a head under a low ceiling: the jump does not shove the rider into it', () => {
+  const s = createRun('potato');
+  const [a, b] = s.players;
+  // under the right-hand platform (row 8, bottom y 9): Sugar on the floor, Spice on her head
+  a.x = 28.5; a.y = 13 - a.h; b.x = 28.5; b.y = a.y - b.h;
+  const solid = (p) => { for (let cy = Math.floor(p.y + 0.01); cy <= Math.floor(p.y + p.h - 0.01); cy++) for (let cx = Math.floor(p.x + 0.01); cx <= Math.floor(p.x + p.w - 0.01); cx++) if (s.grid[cy][cx] === '#') return true; return false; };
+  step(s, [I, I]);
+  for (let i = 0; i < 30; i++) {
+    step(s, [{ ...I, jump: true, jumpPressed: i === 0 }, I]);
+    assert.ok(!solid(b), `step ${i}: Spice inside the ceiling at y ${b.y.toFixed(2)}`);
+  }
+});

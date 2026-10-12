@@ -283,7 +283,15 @@ function moveY(s, p, dy) {
         landTop = pl.y; landed = { who: pl.who, ride: pl.ride };
       }
     }
-    if (landed) { p.y = landTop - p.h; p.vy = 0; }
+    if (landed) {
+      p.y = landTop - p.h; p.vy = 0;
+      // a support that rises (a head, a lift) must not shove its rider into a ceiling:
+      // the rider is squeezed off under the ceiling instead
+      if ((landed.who >= 0 || landed.ride >= 0) && rectHitsSolid(s, p.x, p.y, p.w, p.h)) {
+        p.y = Math.floor(p.y + EPS) + 1;
+        return null;
+      }
+    }
     return p.grav > 0 ? landed : null;
   }
   if (dy < 0) {
