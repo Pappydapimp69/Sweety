@@ -40,3 +40,30 @@ export const BONK_STUN = 0.6;
 
 export const PAD_DEADZONE = 0.3;   // radial, not per axis
 export const PAD_POLL_MS = 1000 / 120;
+
+// ---- chapter 4+ powers
+export const SWAP_COOLDOWN = 0.6;
+export const GUST_LEN = 7;          // tiles in front of Sugar
+export const GUST_H = 3;            // tall box centred on her
+export const GUST_PUSH = 15;        // horizontal shove
+export const GUST_LIFT = 9;         // and a little lift
+export const GUST_TIME = 0.35;      // how long the shove overrides steering
+export const GUST_COOLDOWN = 0.45;
+export const GLIDE_FALL = 2.2;      // max fall speed while gliding
+export const VENT_LIFT = 95;        // upward accel in a vent while gliding
+export const VENT_MAX = 10;
+export const VENT_REACH = 12;       // vent column height
+export const DASH_V = 24;
+export const DASH_TIME = 0.17;      // ~4 tiles
+export const PINWHEEL_SPIN = 2.5;   // seconds a gusted pinwheel keeps its door open
+
+// ---- gentle mode
+export const GENTLE_RESPAWN = 0.35;
+
+// ---- mini-games
+export const RAIN_TIME = 45;
+export const RAIN_EVERY = 0.55;
+export const POTATO_ROUNDS = 3;     // first to this many wins
+export const POTATO_MIN = 9;
+export const POTATO_MAX = 16;
+export const POTATO_PASS_COOLDOWN = 0.6;

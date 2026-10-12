@@ -11,17 +11,33 @@
 export const H = 18;
 
 // A section: rows padded right with '.', rows past the last given one copy it.
-function sec(w, rows) {
+// Entities (moving platforms, saws, pinwheels, talk triggers) use section-local x.
+function sec(w, rows, ents = []) {
   const out = [];
   for (let r = 0; r < H; r++) {
     const src = r < rows.length ? rows[r] : rows[rows.length - 1];
     if (src.length > w) throw new Error(`section row ${r} longer than ${w}: "${src}"`);
     out.push(src.padEnd(w, '.'));
   }
+  out.ents = ents;
+  out.w = w;
   return out;
 }
+const shift = (e, dx) => ({ ...e, x: e.x !== undefined ? e.x + dx : undefined, path: e.path && e.path.map(([x, y]) => [x + dx, y]) });
+// Join sections left to right; returns the map rows, with .ents in world coordinates.
 function join(...secs) {
-  return Array.from({ length: H }, (_, r) => secs.map((s) => s[r]).join(''));
+  const rows = Array.from({ length: H }, (_, r) => secs.map((s) => s[r]).join(''));
+  const ents = [];
+  let off = 0;
+  for (const s of secs) { for (const e of s.ents || []) ents.push(shift(e, off)); off += s[0].length; }
+  rows.ents = ents;
+  return rows;
+}
+// x offset of a section inside a joined map (for zones and floods)
+export function offsetOf(secs, target) {
+  let off = 0;
+  for (const s of secs) { if (s === target) return off; off += s[0].length; }
+  throw new Error('section not in map');
 }
 const sky = (n, s = '') => Array(n).fill(s);
 const ground = (w) => '#'.repeat(w);
@@ -116,10 +132,13 @@ export const CHAPTERS = [
 
 export const BONK = {
   id: 'bonk', name: 'Bonk!', tagline: 'Land on their head. First to 5.',
-  powers: { sugar: 'none', spice: 'none' }, theme: 'day', map: arena, bonk: true,
+  powers: { sugar: 'none', spice: 'none' }, theme: 'day', map: arena, mini: 'bonk',
   tips: ['Jump on your partner\'s head to score.'],
 };
+export const MINIGAMES = [BONK];
+
+for (const c of [...CHAPTERS, ...MINIGAMES]) c.ents = c.map.ents || [];
 
 export function chapterById(id) {
-  return id === 'bonk' ? BONK : CHAPTERS.find((c) => c.id === id);
+  return CHAPTERS.find((c) => c.id === id) || MINIGAMES.find((c) => c.id === id);
 }
