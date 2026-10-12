@@ -115,6 +115,17 @@ export function powerOf(s, p) {
 }
 
 function placeAtSpawn(s, p, at = null) {
+  // a gentle-mode safe spot remembers the size you had there (small Spice in a tunnel
+  // must come back small), and a spot you no longer fit in falls back to the checkpoint
+  if (at && at.size && at.size !== p.size) {
+    const { w, h } = C.SIZE[at.size];
+    p.size = at.size; p.w = w; p.h = h;
+  }
+  if (at) {
+    const g = at.grav || 1;
+    const y = g > 0 ? at.y - p.h : at.y;
+    if (rectHitsSolid(s, at.x - p.w / 2, y, p.w, p.h)) at = null;
+  }
   let fx, fy;   // feet centre
   if (at) { fx = at.x; fy = at.y; }
   else if (s.checkpoint) {
@@ -502,7 +513,7 @@ function noteSafe(s, p) {
   const feetRow = p.grav > 0 ? Math.floor(p.y + p.h + 0.01) : Math.floor(p.y - 0.01);
   const cells = [];
   for (let cx = Math.floor(p.x + EPS); cx <= Math.floor(p.x + p.w - EPS); cx++) cells.push(tileAt(s, cx, feetRow));
-  if (cells.every((t) => t === '#' || t === 'L')) p.safe = { x: p.x + p.w / 2, y: p.grav > 0 ? p.y + p.h : p.y, grav: p.grav };
+  if (cells.every((t) => t === '#' || t === 'L')) p.safe = { x: p.x + p.w / 2, y: p.grav > 0 ? p.y + p.h : p.y, grav: p.grav, size: p.size };
 }
 
 function resize(s, p, next) {

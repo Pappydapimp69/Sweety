@@ -189,3 +189,19 @@ test('standing on a head under a low ceiling: the jump does not shove the rider 
     assert.ok(!solid(b), `step ${i}: Spice inside the ceiling at y ${b.y.toFixed(2)}`);
   }
 });
+
+test('gentle respawn: small in the tunnel, he comes back small, never inside the roof', async () => {
+  const { chapterById } = await import('../src/levels.js');
+  const N = chapterById('night').offsets.tunnel;
+  const s = createRun('night', { gentle: true });
+  const b = s.players[1];
+  // small Spice stood in the tunnel (feet on its solid entrance), then grew big elsewhere and died
+  b.safe = { x: N + 2.5, y: 13, grav: 1, size: 'small' };
+  b.size = 'big'; b.w = 1.3; b.h = 1.9; b.x = N + 6; b.y = 15;
+  b.dead = true; b.deadT = 0.01;
+  step(s, [I, I]);
+  assert.ok(!b.dead);
+  assert.equal(b.size, 'small');
+  const hit = []; for (let cy = Math.floor(b.y + 0.01); cy <= Math.floor(b.y + b.h - 0.01); cy++) for (let cx = Math.floor(b.x + 0.01); cx <= Math.floor(b.x + b.w - 0.01); cx++) if (s.grid[cy][cx] === '#') hit.push([cx, cy]);
+  assert.deepEqual(hit, []);
+});
