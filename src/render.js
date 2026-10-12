@@ -276,7 +276,7 @@ function drawTile(ctx, s, c, x, y, px, py, k, T, t) {
 function drawEnt(ctx, s, e, sx, sy, k, t) {
   if (e.type === 'platform') {
     const x = sx(e.x), y = sy(e.y), w = e.w * k;
-    const running = !(s.frozen) && !(e.g && !s.pressed[e.g]);
+    const running = !s.frozen;
     if (e.look === 'cloud') {
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
@@ -297,7 +297,7 @@ function drawEnt(ctx, s, e, sx, sy, k, t) {
     }
   } else if (e.type === 'saw') {
     const r = (e.r || 0.6) * k, x = sx(e.x), y = sy(e.y);
-    const spin = s.frozen || (e.g && (e.stop ? s.pressed[e.g] : !s.pressed[e.g])) ? 0 : t * 14;
+    const spin = s.frozen || (e.g && Math.abs(e.x - e.prevX) + Math.abs(e.y - e.prevY) < 1e-9) ? 0 : t * 14;
     ctx.fillStyle = '#ced4da';
     gearPath(ctx, x, y, r, 9, spin); ctx.fill();
     ctx.fillStyle = '#868e96'; ctx.beginPath(); ctx.arc(x, y, r * 0.3, 0, Math.PI * 2); ctx.fill();

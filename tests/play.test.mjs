@@ -48,12 +48,14 @@ test('Sugar alone cannot get past the crates', () => {
   assert.equal(soloCanReach('toolbox', 0, 22), false);
 });
 
+import { chapterById } from '../src/levels.js';
+const CLIMB = chapterById('night').offsets.climb;   // stone 2 is at CLIMB+6..7, top y 9
 test('Night: if Sugar walks off, the stone under Spice goes dark', () => {
   const s = createRun('night');
   const [sg, sp] = s.players;
   // Spice on stone 2 alone, Sugar far away on the ground
-  sp.x = 80.5 - sp.w / 2; sp.y = 9 - sp.h;
-  sg.x = 70; sg.y = 13 - sg.h;
+  sp.x = CLIMB + 6.5 - sp.w / 2; sp.y = 9 - sp.h;
+  sg.x = CLIMB - 4; sg.y = 13 - sg.h;
   for (let i = 0; i < 30; i++) step(s, [I, I]);
   assert.ok(feet(sp) > 9.5, 'Spice should have fallen through the dark stone');
 });
@@ -61,8 +63,8 @@ test('Night: if Sugar walks off, the stone under Spice goes dark', () => {
 test('Night: in Sugar\'s light the same stone holds', () => {
   const s = createRun('night');
   const [sg, sp] = s.players;
-  sp.x = 80.5 - sp.w / 2; sp.y = 9 - sp.h;
-  sg.x = 81.5 - sg.w / 2; sg.y = 9 - sg.h;
+  sp.x = CLIMB + 6.5 - sp.w / 2; sp.y = 9 - sp.h;
+  sg.x = CLIMB + 7.5 - sg.w / 2; sg.y = 9 - sg.h;
   for (let i = 0; i < 30; i++) step(s, [I, I]);
   assert.ok(Math.abs(feet(sp) - 9) < 0.01);
 });

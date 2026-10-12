@@ -60,7 +60,7 @@ export function createRun(chapterId, opts = {}) {
     chapterId: ch.id, mode, bonk: mode === 'bonk', powers: ch.powers, zones: ch.zones || null,
     gentle: !!opts.gentle,
     w, h, grid, plates, vents, spawns, ents,
-    pressed: [false, false, false, false, false], held: [],
+    pressed: [false, false, false, false, false], held: [], sources: [],
     checkpoint: null, frozen: false,
     players: [0, 1].map((id) => makePlayer(id, ch)),
     pins: [], shots: [], gusts: [], drops: [],
@@ -222,7 +222,7 @@ function updateMovers(s) {
     if (e.type === 'pinwheel') { e.spin = Math.max(0, e.spin - C.DT); continue; }
     if (!e.path) continue;
     if (s.frozen) continue;
-    if (e.g && (e.stop ? s.pressed[e.g] : !s.pressed[e.g])) continue;   // `stop`: a plate halts it
+    if (e.g && (e.stop ? moverPowered(s, e) : !moverPowered(s, e))) continue;   // `stop`: a plate halts it
     e.t += C.DT;
     placeMover(e);
   }
@@ -368,6 +368,7 @@ function heldDoors(s) {
 
 function computePressed(s) {
   const pressed = [false, false, false, false, false];
+  s.sources = [];   // where each pressed switch is, so movers answer only their own
   for (const pl of s.plates) {
     for (const p of s.players) {
       if (p.dead) continue;
@@ -377,11 +378,19 @@ function computePressed(s) {
       const hit = pl.ceil
         ? p.grav < 0 && p.y < pl.y + 0.25 && p.y + p.h > pl.y
         : p.grav > 0 && p.y + p.h > pl.y + 0.75 && p.y < pl.y + 1;
-      if (hit) pressed[pl.g] = true;
+      if (hit) { pressed[pl.g] = true; s.sources.push({ g: pl.g, x: pl.x + 0.5 }); break; }
     }
   }
-  for (const e of s.ents) if (e.type === 'pinwheel' && e.spin > 0) pressed[e.g] = true;
+  for (const e of s.ents) if (e.type === 'pinwheel' && e.spin > 0) { pressed[e.g] = true; s.sources.push({ g: e.g, x: e.x + 0.5 }); }
   return pressed;
+}
+
+// A mover answers a switch of its colour only if that switch is near it: the same
+// colour can run two machines in two parts of a chapter without one moving the other.
+const MOVER_REACH = 30;
+function moverPowered(s, e) {
+  const mid = e.path ? (e.path[0][0] + e.path[1][0]) / 2 : e.x;
+  return s.sources.some((q) => q.g === e.g && Math.abs(q.x - mid) < MOVER_REACH);
 }
 
 function updatePlayer(s, p, inp) {

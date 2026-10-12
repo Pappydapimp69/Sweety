@@ -134,3 +134,18 @@ test('mini-games are deterministic and end', () => {
     assert.ok(a.complete, `${id} ends`);
   }
 });
+
+test('a switch moves only the machine near it, not a same-coloured one far away', () => {
+  const W2 = 80;
+  const rows = [...Array(12).fill('#'), '#.PQ1'.padEnd(W2, '.'), '#'.repeat(W2)];
+  const ch = { id: 't', powers: { sugar: 'none', spice: 'none' }, map: rows.map((r) => r.padEnd(W2, '.')), ents: [
+    { type: 'platform', w: 2, path: [[8, 10], [14, 10]], period: 2, g: 1 },
+    { type: 'platform', w: 2, path: [[60, 10], [66, 10]], period: 2, g: 1 },
+  ] };
+  const s = createRun(ch);
+  const a = s.players[0];
+  a.x = 4.1; a.y = 13 - a.h;   // on the switch
+  for (let i = 0; i < 60; i++) step(s, [I, I]);
+  assert.ok(s.ents[0].x > 8.5, 'the near platform runs');
+  assert.equal(s.ents[1].x, 60, 'the far one stays put');
+});

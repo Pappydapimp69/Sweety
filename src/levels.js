@@ -23,14 +23,22 @@ function sec(w, rows, ents = []) {
   out.w = w;
   return out;
 }
+// Name a section so tests can find where it landed in the joined map.
+const named = (name, s) => { s.name = name; return s; };
 const shift = (e, dx) => ({ ...e, x: e.x !== undefined ? e.x + dx : undefined, path: e.path && e.path.map(([x, y]) => [x + dx, y]) });
 // Join sections left to right; returns the map rows, with .ents in world coordinates.
 function join(...secs) {
   const rows = Array.from({ length: H }, (_, r) => secs.map((s) => s[r]).join(''));
   const ents = [];
+  const offsets = {};
   let off = 0;
-  for (const s of secs) { for (const e of s.ents || []) ents.push(shift(e, off)); off += s[0].length; }
+  for (const s of secs) {
+    for (const e of s.ents || []) ents.push(shift(e, off));
+    if (s.name) offsets[s.name] = off;
+    off += s[0].length;
+  }
   rows.ents = ents;
+  rows.offsets = offsets;
   return rows;
 }
 // x offset of a section inside a joined map (for zones and floods)
@@ -62,6 +70,17 @@ const g_bridge = sec(18, [
   '###............###', '###^^^^^^^^^^^^###',
 ], [{ type: 'sign', x: 0, text: 'A bridge holds only while someone stands on a plate of its colour.' }]);
 
+// Take turns: hold a plate, let your partner through, swap.
+const g_relay = named('relay', sec(16, [
+  ...sky(10, '.....#.....#'), '.....D.....B', '.....D.....B', '..4..D.42..B.2', ground(16),
+], [{ type: 'sign', x: 0, text: 'Take turns: hold a plate, let your partner through, then swap.' }]));
+// One climbs a shoulder to the switch; the bridge waits for the other.
+const g_ledge = named('ledge', sec(22, [
+  ...sky(7), '...h', '.....3', '..#####', '', '', '....................3',
+  '########cccccccccc####', '########..........####', '########..........####', '########..........####',
+  '########^^^^^^^^^^####',
+], [{ type: 'sign', x: 0, text: 'The switch is up on the ledge. A shoulder, then the bridge.' }]));
+
 // ---------- Chapter 2: The Toolbox — Sugar's pins, Spice's slam ----------
 const t_crates = sec(16, [
   ...sky(13, '..........##'), '####xxx#####...#', '####...........#', '####..........##', ground(16),
@@ -76,6 +95,15 @@ const t_launch = sec(20, [
   '............B', '............B', '####LL###LL#########', ground(20),
 ], [{ type: 'sign', x: 1, text: 'Sugar waits on the far pad. Spice slams the near one ({spice} in the air).' }, { type: 'talk', x: 2, id: 'toolbox1' }]);
 
+// Two pins make a ladder; the high one needs Sugar on Spice's shoulders. His switch lifts her up.
+const t_lift = named('lift', sec(18, [
+  ...sky(5), '...............h', '.............4', '..........########', '..........########',
+  '..........########', '..........########', '....##....########', '....##....########', ground(18),
+], [
+  { type: 'platform', w: 2, path: [[8, 13], [8, 6.8]], period: 5, g: 4, look: 'plank' },   // tops out just above the ledge, so you step off, not into it
+  { type: 'sign', x: 1, text: 'Two pins make a ladder. For the high one, Sugar stands on Spice\'s shoulders.' },
+]));
+
 // ---------- Chapter 3: The Night — Sugar's lantern, Spice shrinks and grows ----------
 const n_pit = sec(20, [
   ...sky(10), '.........h', '', '', '##~~~~~~~~~~~~~~~~##', '##................##',
@@ -85,12 +113,18 @@ const n_crawl = sec(16, [...sky(10, '......##'), '......AA', '......AA', '......
 const n_heavy = sec(18, [
   ...sky(10, '.........#'), '.........', '.........B', '......6..B', ground(18),
 ], [{ type: 'sign', x: 2, text: 'Big Spice presses the heavy plate. Small Spice fits the hole above the door.' }]);
-const n_climb = sec(18, [
+// Spice crawls below, Sugar walks the roof above and lights his way.
+const n_tunnel = named('tunnel', sec(22, [
+  ...sky(8, '..................#'), '..................C', '..................C', '.........h........C',
+  '..#################', '....................3', '###~~~~~~~~~~~~~~#####', '###..............#####',
+  '###..............#####', '###..............#####', '###^^^^^^^^^^^^^^#####',
+], [{ type: 'sign', x: 0, text: 'Small Spice crawls the tunnel. Sugar walks on top and lights his way. Hold {sugar} to shine further.' }, { type: 'talk', x: 3, id: 'night2' }]));
+const n_climb = named('climb', sec(18, [
   '.................#', '.................#', '.............***#', '.............***#',
-  '.............***#', '............######', '............######', '.........~~.######',
+  '.............***#', '............######', '............######', '........~~~.######',
   '............######', '......~~....######', '............######', '...~~.......######',
   '............######', ground(18),
-], [{ type: 'sign', x: 1, text: 'Sugar: hold {sugar} to shine brighter while Spice climbs.' }, { type: 'talk', x: 2, id: 'night1' }]);
+], [{ type: 'sign', x: 1, text: 'Sugar: hold {sugar} to shine brighter while Spice climbs.' }, { type: 'talk', x: 2, id: 'night1' }]));
 
 // ---------- Chapter 4: The Attic — Sugar swaps, Spice flips gravity ----------
 // Indoors: rows 0-3 are the roof, so flipped Spice has a ceiling to walk on.
@@ -107,10 +141,16 @@ const a_zig = room(24, [
   '....vvvv.........vvv', ...Array(4).fill(''), '..............h', '', '', '',
   '#########^^^^^^^########', ground(24),
 ], [{ type: 'talk', x: 1, id: 'attic2' }, { type: 'sign', x: 2, text: 'Zig and zag: flip where the spikes leave a gap.' }]);
-const a_goal = room(14, [
+// Over the wall on the ceiling, a swap, then a ceiling switch holds her bridge.
+const a_wall = named('wall', room(24, [
+  '..............3', '', '', '........#', '........#', '........#', '........#', '........#', '........#',
+  '#############cccccccc###', '#############........###', '#############........###', '#############........###',
+  '#############^^^^^^^^###',
+], [{ type: 'sign', x: 1, text: 'Over the wall: Spice walks the ceiling, then Sugar swaps. Up there, a switch for her bridge.' }, { type: 'talk', x: 2, id: 'attic3' }]));
+const a_goal = named('shelf', room(14, [
   '.............#', '.............#', '.........***.#', '.........***.#', '.........***.#',
   '.......#######', '.......#######', '.......#######', '.......#######', ground(14),
-], [{ type: 'sign', x: 2, text: 'The shelf: a shoulder for Sugar, the ceiling for Spice.' }]);
+], [{ type: 'sign', x: 2, text: 'The shelf: a shoulder for Sugar, the ceiling for Spice.' }]));
 
 // ---------- Chapter 5: The Sky — Sugar's gust, Spice's umbrella ----------
 const pit = (w, l, r) => '#'.repeat(l) + '.'.repeat(w - l - r) + '#'.repeat(r);
@@ -134,6 +174,16 @@ const s_wheel = sec(26, [
 s_wheel[12] = '........C..............4..';
 s_wheel[9] = '........#.........h.......';
 
+// Vent to vent over a long drop; then Spice holds the switch for Sugar's cloud.
+const s_vents2 = named('vents2', sec(26, [
+  ...sky(9), '............h', '', '', '........................1.', '###....................###',
+  '###.....V.......V.....###', '###.....#.......#.....###',
+], [
+  { type: 'platform', w: 3, path: [[3, 13], [20, 13]], period: 9, g: 1, look: 'cloud' },
+  { type: 'sign', x: 1, text: 'Spice: glide from vent to vent (hold {spiceJump}). Then stand on the switch for Sugar\'s cloud.' },
+  { type: 'talk', x: 2, id: 'sky3' },
+]));
+
 // ---------- Chapter 6: The Clocktower — Sugar stops time, Spice dashes ----------
 const c_saws = sec(22, [
   ...sky(10, '...##############'), '................%', '................%', '................%.1...',
@@ -152,6 +202,18 @@ const c_ferry = sec(26, [
   { type: 'platform', w: 3, path: [[2, 11], [15, 11]], period: 9, g: 3, look: 'gear' },
   { type: 'saw', path: [[6, 7], [6, 11]], period: 1.6, r: 0.55, g: 3, stop: true },
   { type: 'talk', x: 0, id: 'clock2' }, { type: 'sign', x: 0, text: 'Spice: jump, then {spice} to dash. Hold the plate when the saw is up.' }]);
+
+// Gears that only make a staircase mid-swing: Sugar stops time for Spice, his switch stops them for her.
+const c_stairs = named('stairs', sec(20, [
+  ...sky(5), '................4', '..............######', '..............######', '..............######',
+  '..............######', '..............######', '..............######', '..............######',
+  '###...........######', '###...........######',
+], [
+  { type: 'platform', w: 2, path: [[4, 13], [4, 9.5]], period: 3, g: 4, stop: true, look: 'gear' },
+  { type: 'platform', w: 2, path: [[7.5, 11], [7.5, 7.5]], period: 3, g: 4, stop: true, look: 'gear' },
+  { type: 'platform', w: 2, path: [[11, 9], [11, 5.5]], period: 3, g: 4, stop: true, look: 'gear' },
+  { type: 'sign', x: 1, text: 'Stop the gears when they make a staircase ({sugar}). Up top, a switch stops them for Sugar.' },
+]));
 
 // ---------- Chapter 7: Home — every power, one last climb ----------
 const h_door = sec(14, [...sky(10, '.......#'), '.......A', '.......A', '...1...A...1', ground(14)], [{ type: 'talk', x: 1, id: 'home1' }]);
@@ -202,8 +264,8 @@ const potatoArena = sec(32, [
   '#...P....................Q.....#', ground(32),
 ]);
 
-const garden = [start, g_step, g_door, g_stack, check, g_pit, g_bridge, goal];
-const atticSecs = [a_start, a_intro, a_doors, a_check, a_zig, a_check, a_goal];
+const garden = [start, g_step, g_door, g_stack, check, g_pit, g_bridge, check, g_relay, g_ledge, goal];
+const atticSecs = [a_start, a_intro, a_doors, a_check, a_zig, a_check, a_wall, a_check, a_goal];
 const homeSecs = [start, h_door, check, h_launch, check, h_dark, check, h_attic, check, h_vent, check, h_saws, h_climb];
 const Z = (sugar, spice) => ({ sugar, spice });
 
@@ -220,7 +282,7 @@ export const CHAPTERS = [
   {
     id: 'toolbox', name: 'The Toolbox', tagline: 'She pins. He pounds.',
     powers: Z('pin', 'slam'), theme: 'workshop', music: 'toolbox',
-    map: join(start, t_crates, check, t_pins, check, t_launch, goal),
+    map: join(start, t_crates, check, t_pins, check, t_launch, check, t_lift, goal),
     tips: [
       'Spice: {ability} in the air to SLAM. Crates break, launch pads fire.',
       'Sugar: {ability} shoots a pin into a wall. Only Spice can stand on pins.',
@@ -229,7 +291,7 @@ export const CHAPTERS = [
   {
     id: 'night', name: 'The Night', tagline: 'Stay in the light.',
     powers: Z('lantern', 'size'), theme: 'night', music: 'night',
-    map: join(start, n_pit, check, n_crawl, check, n_heavy, n_climb),
+    map: join(start, n_pit, check, n_crawl, check, n_heavy, check, n_tunnel, n_climb),
     tips: [
       'Sugar: hidden stones only hold in your light. Hold {ability} to shine brighter.',
       'Spice: {ability} switches small (fits holes) and big (heavy plates).',
@@ -247,7 +309,7 @@ export const CHAPTERS = [
   {
     id: 'sky', name: 'The Sky', tagline: 'Catch the wind.',
     powers: Z('gust', 'glide'), theme: 'sky', music: 'sky',
-    map: join(start, s_cloud, check, s_vent, check, s_wheel, goal),
+    map: join(start, s_cloud, check, s_vent, check, s_wheel, check, s_vents2, goal),
     tips: [
       'Spice: hold {jump} in the air to glide. Vents lift you while you glide.',
       'Sugar: {ability} blows a gust. It pushes Spice and spins pinwheels.',
@@ -256,7 +318,7 @@ export const CHAPTERS = [
   {
     id: 'clock', name: 'The Clocktower', tagline: 'Hold still. Go fast.',
     powers: Z('freeze', 'dash'), theme: 'clock', music: 'clock',
-    map: join(start, c_saws, check, c_bob, check, c_ferry, goal),
+    map: join(start, c_saws, check, c_bob, check, c_ferry, check, c_stairs, goal),
     tips: [
       'Sugar: hold {ability} to stop every gear and saw. You can\'t move while you do.',
       'Spice: {ability} dashes. It smashes glass. Once per jump.',
@@ -337,10 +399,13 @@ export const STORY = {
     garden1: [['Sugar', 'Lend me a shoulder?'], ['Spice', 'Always.']],
     toolbox1: [['Spice', 'Stand on the pad. Trust me.'], ['Sugar', 'Famous last words.']],
     night1: [['Sugar', 'I\'ll light the way.'], ['Spice', 'I\'ll be right behind you.']],
+    night2: [['Spice', 'It\'s very dark down here.'], ['Sugar', 'I\'m right above you. Every step.']],
     attic1: [['Sugar', 'Floor\'s full of spikes.'], ['Spice', 'Ceiling isn\'t. Then swap me back.']],
     attic2: [['Spice', 'Spikes on the ceiling AND the floor?'], ['Sugar', 'Zig and zag, love.']],
+    attic3: [['Sugar', 'A wall? I\'ll swap over.'], ['Spice', 'And I\'ll hold the ceiling for you.']],
     sky1: [['Sugar', 'Jump, and I\'ll blow you across!'], ['Spice', 'Then I\'ll hold the cloud for you.']],
     sky2: [['Sugar', 'A pinwheel! My wind will spin it.']],
+    sky3: [['Spice', 'Vents all the way across?'], ['Sugar', 'Show-off. I\'ll take the cloud.']],
     clock1: [['Spice', 'Saws. Of course there are saws.'], ['Sugar', 'Hold still... and go!']],
     clock2: [['Sugar', 'Hold that plate, I\'ll ride the gear.']],
     home1: [['Sugar', 'Remember the garden?'], ['Spice', 'Our first door.']],
@@ -348,7 +413,7 @@ export const STORY = {
   },
 };
 
-for (const c of [...CHAPTERS, ...MINIGAMES]) c.ents = c.map.ents || [];
+for (const c of [...CHAPTERS, ...MINIGAMES]) { c.ents = c.map.ents || []; c.offsets = c.map.offsets || {}; }
 
 export function chapterById(id) {
   return CHAPTERS.find((c) => c.id === id) || MINIGAMES.find((c) => c.id === id);

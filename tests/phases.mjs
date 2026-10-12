@@ -1,8 +1,16 @@
 // Scripted two-player routes through each chapter.
 import { NO_INPUT } from '../src/sim.js';
 import { walk, autorun, jumpToward, near, cx, feet } from './bots.mjs';
+import { chapterById } from '../src/levels.js';
 
 const I = NO_INPUT;
+// the middle of the goal, read from the map
+export function goalX(s) {
+  const xs = [];
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (s.grid[y][x] === '*') xs.push(x + 0.5);
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+const toGoal = { name: 'goal', ctrl: (s) => [walk(s.players[0], goalX(s) - 0.3), walk(s.players[1], goalX(s) + 0.3)], done: (s) => s.complete };
 const both = (s, f) => [f(s, s.players[0]), f(s, s.players[1])];
 
 export function gardenPhases() {
@@ -28,7 +36,80 @@ export function gardenPhases() {
       done: (s) => near(s.players[1], 90.5) },
     { name: 'Sugar over Spice\'s bridge', ctrl: (s) => [walk(s.players[0], 92), walk(s.players[1], 90.5)],
       done: (s) => near(s.players[0], 92) },
-    { name: 'goal', ctrl: (s) => both(s, (s, p) => walk(p, p.id ? 97.6 : 97.4)), done: (s) => s.complete },
+    ...gardenMore(),
+    toGoal,
+  ];
+}
+
+function toolboxMore() {
+  const T = chapterById('toolbox').offsets.lift;
+  const sg = (s) => s.players[0], sp = (s) => s.players[1];
+  const onStep = (p) => feet(p) < 11.05 && cx(p) > T + 3.9 && cx(p) < T + 6.1;
+  return [
+    { name: 'lift: Sugar up the step', ctrl: (s) => [onStep(sg(s)) ? walk(sg(s), T + 5.2) : jumpToward(sg(s), T + 5.2), walk(sp(s), T + 2)],
+      done: (s) => near(sg(s), T + 5.2) && onStep(sg(s)) },
+    { name: 'lift: the low pin', ctrl: (s) => [{ ...I, right: sg(s).facing < 0, abilityPressed: sg(s).facing > 0 && !s.shots.length }, I], done: (s) => s.pins.some((q) => q.x === T + 9 && q.y > 10) && !s.shots.length },
+    { name: 'lift: Sugar down, Spice up the step', ctrl: (s) => [walk(sg(s), T + 2), onStep(sp(s)) ? walk(sp(s), T + 4.6) : jumpToward(sp(s), T + 4.6)],
+      done: (s) => near(sg(s), T + 2) && near(sp(s), T + 4.6) && onStep(sp(s)) },
+    { name: 'lift: Sugar onto his shoulders', ctrl: (s) => [jumpToward(sg(s), T + 4.6), I], done: (s) => sg(s).standOn === 1 && Math.abs(cx(sg(s)) - (T + 4.6)) < 0.3 },
+    { name: 'lift: the high pin', ctrl: (s) => [{ ...I, right: sg(s).facing < 0, abilityPressed: sg(s).facing > 0 && !s.shots.length }, I], done: (s) => s.pins.some((q) => q.x === T + 9 && q.y < 9.5) && !s.shots.length },
+    { name: 'lift: Sugar steps clear', ctrl: (s) => [walk(sg(s), T + 2), I], done: (s) => near(sg(s), T + 2) },
+    { name: 'lift: Spice up the pin ladder', ctrl: (s) => {
+      const p = sp(s), f = feet(p);
+      const tx = f < 7.1 ? T + 11.5 : f < 9.2 ? T + 10.6 : T + 9.4;   // pin A, pin B, then the ledge
+      return [I, jumpToward(p, tx)];
+    }, done: (s) => feet(sp(s)) < 7.1 && sp(s).onGround && cx(sp(s)) > T + 10.2, max: 1500 },
+    { name: 'lift: Sugar onto the lift', ctrl: (s) => [autorun(s, sg(s), T + 9), walk(sp(s), T + 12)], done: (s) => near(sg(s), T + 9) },
+    { name: 'lift: Spice on the switch', ctrl: (s) => [I, walk(sp(s), T + 13.5)], done: (s) => near(sp(s), T + 13.5) },
+    { name: 'lift: Sugar rides up and steps off', ctrl: (s) => [s.ents.find((e) => e.g === 4).y < 7.2 ? walk(sg(s), T + 12) : I, I],
+      done: (s) => near(sg(s), T + 12) && feet(sg(s)) < 7.1, max: 1200 },
+    { name: 'lift: on to the end', ctrl: (s) => [autorun(s, sg(s), T + 19.5), autorun(s, sp(s), T + 20.5)], done: (s) => near(sg(s), T + 19.5) && near(sp(s), T + 20.5) },
+  ];
+}
+
+function nightTunnel() {
+  const N = chapterById('night').offsets.tunnel;
+  const sg = (s) => s.players[0], sp = (s) => s.players[1];
+  return [
+    { name: 'tunnel: to the mouth', ctrl: (s) => [autorun(s, sg(s), N + 1.0), autorun(s, sp(s), N + 1.6)], done: (s) => near(sg(s), N + 1.0) && near(sp(s), N + 1.6) },
+    { name: 'tunnel: Sugar onto the roof', ctrl: (s) => [feet(sg(s)) < 11.05 ? walk(sg(s), N + 2.6) : jumpToward(sg(s), N + 2.6), I], done: (s) => near(sg(s), N + 2.6) && feet(sg(s)) < 11.05 },
+    { name: 'tunnel: crawl and light, step by step', ctrl: (s) => [walk(sg(s), Math.min(N + 17.3, cx(sp(s)) + 0.6)), walk(sp(s), cx(sp(s)) > N + 17.6 ? N + 20.5 : Math.min(N + 20.5, cx(sg(s)) + 1.1))],
+      done: (s) => near(sp(s), N + 20.5) && near(sg(s), N + 17.3), max: 3000 },
+    { name: 'tunnel: Sugar through C', ctrl: (s) => [walk(sg(s), N + 21.3), walk(sp(s), N + 20.5)], done: (s) => near(sg(s), N + 21.3) },
+  ];
+}
+
+function nightClimb() {
+  const C = chapterById('night').offsets.climb;
+  const sg = (s) => s.players[0], sp = (s) => s.players[1];
+  const hop = (p, tx, top) => (feet(p) < top && p.onGround ? walk(p, tx) : jumpToward(p, tx));
+  return [
+    { name: 'to the stones', ctrl: (s) => [walk(sg(s), C + 2), walk(sp(s), C + 1)], done: (s) => near(sg(s), C + 2) && near(sp(s), C + 1) },
+    { name: 'Sugar to stone 1', ctrl: (s) => [hop(sg(s), C + 3.9, 11.1), I], done: (s) => near(sg(s), C + 3.9) && feet(sg(s)) < 11.1 },
+    { name: 'Sugar to stone 2', ctrl: (s) => [hop(sg(s), C + 7, 9.1), I], done: (s) => near(sg(s), C + 7) && feet(sg(s)) < 9.1 },
+    { name: 'Sugar shines, Spice to stone 1', ctrl: (s) => [{ ...I, ability: true }, hop(sp(s), C + 4.5, 11.1)], done: (s) => near(sp(s), C + 4.5) && feet(sp(s)) < 11.1 },
+    { name: 'Spice to stone 2', ctrl: (s) => [{ ...I, ability: true }, hop(sp(s), C + 6.3, 9.1)], done: (s) => near(sp(s), C + 6.3) && feet(sp(s)) < 9.1 },
+    { name: 'Spice to stone 3', ctrl: (s) => [I, hop(sp(s), C + 9.2, 7.1)], done: (s) => near(sp(s), C + 9.2) && feet(sp(s)) < 7.1 },
+    { name: 'Spice to the ledge', ctrl: (s) => [I, hop(sp(s), C + 14.6, 5.1)], done: (s) => near(sp(s), C + 14.6) && feet(sp(s)) < 5.1 },
+    { name: 'Sugar to stone 3', ctrl: (s) => [hop(sg(s), C + 10.2, 7.1), I], done: (s) => near(sg(s), C + 10.2) && feet(sg(s)) < 7.1 },
+    { name: 'goal', ctrl: (s) => [hop(sg(s), C + 14.4, 5.1), walk(sp(s), C + 14.6)], done: (s) => s.complete },
+  ];
+}
+
+function gardenMore() {
+  const R = chapterById('garden').offsets.relay, L = chapterById('garden').offsets.ledge;
+  const sg = (s) => s.players[0], sp = (s) => s.players[1];
+  return [
+    { name: 'relay: line up', ctrl: (s) => [walk(sg(s), R + 2.5), walk(sp(s), R + 3.8)], done: (s) => near(sg(s), R + 2.5) && near(sp(s), R + 3.8) },
+    { name: 'relay: Spice through D', ctrl: (s) => [walk(sg(s), R + 2.5), walk(sp(s), R + 7.5)], done: (s) => near(sp(s), R + 7.5) },
+    { name: 'relay: Sugar to plate 2', ctrl: (s) => [walk(sg(s), R + 8.5), walk(sp(s), R + 7.5)], done: (s) => near(sg(s), R + 8.5) },
+    { name: 'relay: Spice through B', ctrl: (s) => [walk(sg(s), R + 8.5), walk(sp(s), R + 13.5)], done: (s) => near(sp(s), R + 13.5) },
+    { name: 'relay: Sugar through', ctrl: (s) => [walk(sg(s), R + 15), walk(sp(s), R + 13.5)], done: (s) => near(sg(s), R + 15) },
+    { name: 'ledge: Spice at the foot', ctrl: (s) => [walk(sg(s), L - 0.5), walk(sp(s), L + 1.4)], done: (s) => near(sg(s), L - 0.5) && near(sp(s), L + 1.4) },
+    { name: 'ledge: Sugar onto Spice', ctrl: (s) => [jumpToward(sg(s), L + 1.4), walk(sp(s), L + 1.4)], done: (s) => sg(s).standOn === 1 && Math.abs(cx(sg(s)) - (L + 1.4)) < 0.3 },
+    { name: 'ledge: Sugar up', ctrl: (s) => [feet(sg(s)) < 9.1 ? walk(sg(s), L + 5.5) : jumpToward(sg(s), L + 5.5), I], done: (s) => near(sg(s), L + 5.5) && feet(sg(s)) < 9.1 },
+    { name: 'ledge: Spice over the bridge', ctrl: (s) => [walk(sg(s), L + 5.5), walk(sp(s), L + 20.5)], done: (s) => near(sp(s), L + 20.5) },
+    { name: 'ledge: Sugar over', ctrl: (s) => [walk(sg(s), L + 21.5), walk(sp(s), L + 20.5)], done: (s) => near(sg(s), L + 21.5) },
   ];
 }
 
@@ -61,7 +142,8 @@ export function toolboxPhases() {
     { name: 'Sugar on plate 2', ctrl: (s) => [walk(s.players[0], 67.5), I], done: (s) => near(s.players[0], 67.5) },
     { name: 'Spice through door B', ctrl: (s) => [walk(s.players[0], 67.5), walk(s.players[1], 73)],
       done: (s) => near(s.players[1], 73) },
-    { name: 'goal', ctrl: (s) => both(s, (s, p) => walk(p, p.id ? 77.6 : 77.4)), done: (s) => s.complete },
+    ...toolboxMore(),
+    toGoal,
   ];
 }
 
@@ -83,23 +165,8 @@ export function nightPhases() {
     { name: 'Spice to the wall', ctrl: (s) => [I, walk(s.players[1], 64.6)], done: (s) => near(s.players[1], 64.6, 0.15) },
     { name: 'Spice into the crawl hole', ctrl: (s) => [I, jumpToward(s.players[1], 67)],
       done: (s) => cx(s.players[1]) > 66 && s.players[1].onGround },
-    { name: 'to the stones', ctrl: (s) => [walk(s.players[0], 76), walk(s.players[1], 75)],
-      done: (s) => near(s.players[0], 76) && near(s.players[1], 75) },
-    { name: 'Sugar to stone 1', ctrl: (s) => [jumpToward(s.players[0], 77.9), I],
-      done: (s) => near(s.players[0], 77.9) && feet(s.players[0]) < 11.1 },
-    { name: 'Sugar to stone 2', ctrl: (s) => [jumpToward(s.players[0], 81), I],
-      done: (s) => near(s.players[0], 81) && feet(s.players[0]) < 9.1 },
-    { name: 'Sugar shines, Spice to stone 1', ctrl: (s) => [{ ...I, ability: true }, jumpToward(s.players[1], 78.5)],
-      done: (s) => near(s.players[1], 78.5) && feet(s.players[1]) < 11.1 },
-    { name: 'Spice to stone 2', ctrl: (s) => [{ ...I, ability: true }, jumpToward(s.players[1], 80.3)],
-      done: (s) => near(s.players[1], 80.3) && feet(s.players[1]) < 9.1 },
-    { name: 'Spice to stone 3', ctrl: (s) => [I, jumpToward(s.players[1], 84.2)],
-      done: (s) => near(s.players[1], 84.2) && feet(s.players[1]) < 7.1 },
-    { name: 'Spice to the ledge', ctrl: (s) => [I, jumpToward(s.players[1], 88.6)],
-      done: (s) => near(s.players[1], 88.6) && feet(s.players[1]) < 5.1 },
-    { name: 'Sugar to stone 3', ctrl: (s) => [jumpToward(s.players[0], 84), I],
-      done: (s) => near(s.players[0], 84) && feet(s.players[0]) < 7.1 },
-    { name: 'goal', ctrl: (s) => [jumpToward(s.players[0], 88.4), walk(s.players[1], 88.6)], done: (s) => s.complete },
+    ...nightTunnel(),
+    ...nightClimb(),
   ];
 }
 
@@ -134,14 +201,29 @@ export function atticPhases() {
     { name: 'Sugar swaps to the far side', ctrl: (s) => [A(), I], done: (s) => cx(sg(s)) > 68 },
     { name: 'settle', ctrl: (s) => [I, I], done: (s) => sg(s).onGround && sp(s).onGround },
     ...zigzag(),
-    { name: 'to the shelf', ctrl: (s) => [walk(sg(s), 82), walk(sp(s), 84.3)], done: (s) => near(sg(s), 82) && near(sp(s), 84.3) },
-    { name: 'Sugar onto Spice', ctrl: (s) => [jumpToward(sg(s), 84.3), I], done: (s) => sg(s).standOn === 1 },
-    { name: 'Sugar onto the shelf', ctrl: (s) => [jumpToward(sg(s), 88), I], done: (s) => near(sg(s), 88) && feet(sg(s)) < 9.1 },
-    { name: 'Spice up', ctrl: (s) => [I, flipTo(sp(s), -1, 84.3)], done: (s) => onCeil(sp(s)) },
-    { name: 'Spice over the shelf', ctrl: (s) => [I, walk(sp(s), 88.6)], done: (s) => near(sp(s), 88.6) },
-    { name: 'Spice down into the goal', ctrl: (s) => [I, flipTo(sp(s), 1, 88.6)], done: (s) => s.complete },
+    ...atticMore(),
   ];
 }
+function atticMore() {
+  const Wl = chapterById('attic').offsets.wall, S = chapterById('attic').offsets.shelf;
+  return [
+    { name: 'wall: line up', ctrl: (s) => [walk(sg(s), Wl + 1.5), walk(sp(s), Wl + 3)], done: (s) => near(sg(s), Wl + 1.5) && near(sp(s), Wl + 3) },
+    { name: 'wall: Spice up', ctrl: (s) => [I, flipTo(sp(s), -1, Wl + 3)], done: (s) => onCeil(sp(s)) },
+    { name: 'wall: Spice over the wall', ctrl: (s) => [I, walk(sp(s), Wl + 11)], done: (s) => near(sp(s), Wl + 11) },
+    { name: 'wall: Sugar swaps over', ctrl: (s) => [A(), I], done: (s) => cx(sg(s)) > Wl + 9 },
+    { name: 'wall: settle', ctrl: (s) => [I, I], done: (s) => sg(s).onGround && onCeil(sp(s)) },
+    { name: 'wall: Spice to the ceiling switch', ctrl: (s) => [I, walk(sp(s), Wl + 14.5)], done: (s) => near(sp(s), Wl + 14.5) },
+    { name: 'wall: Sugar over her bridge', ctrl: (s) => [walk(sg(s), Wl + 22.5), walk(sp(s), Wl + 14.5)], done: (s) => near(sg(s), Wl + 22.5) },
+    { name: 'wall: Spice along and down', ctrl: (s) => [I, cx(sp(s)) > Wl + 21.5 ? flipTo(sp(s), 1, Wl + 22) : walk(sp(s), Wl + 22)], done: (s) => sp(s).grav > 0 && sp(s).onGround && cx(sp(s)) > Wl + 21 },
+    { name: 'to the shelf', ctrl: (s) => [walk(sg(s), S + 4), walk(sp(s), S + 6.3)], done: (s) => near(sg(s), S + 4) && near(sp(s), S + 6.3) },
+    { name: 'Sugar onto Spice', ctrl: (s) => [jumpToward(sg(s), S + 6.3), I], done: (s) => sg(s).standOn === 1 },
+    { name: 'Sugar onto the shelf', ctrl: (s) => [jumpToward(sg(s), S + 10), I], done: (s) => near(sg(s), S + 10) && feet(sg(s)) < 9.1 },
+    { name: 'Spice up', ctrl: (s) => [I, flipTo(sp(s), -1, S + 6.3)], done: (s) => onCeil(sp(s)) },
+    { name: 'Spice over the shelf', ctrl: (s) => [I, walk(sp(s), S + 10.6)], done: (s) => near(sp(s), S + 10.6) },
+    { name: 'Spice down into the goal', ctrl: (s) => [I, flipTo(sp(s), 1, S + 10.6)], done: (s) => s.complete },
+  ];
+}
+
 // Spice zigzags floor -> ceiling -> floor across the spikes, ending at x 70 upright.
 function zigzag() {
   return [
@@ -177,7 +259,54 @@ export function skyPhases() {
     { name: 'Spice on plate 4', ctrl: (s) => [I, walk(sp(s), 89.5)], done: (s) => near(sp(s), 89.5) },
     { name: 'Sugar spins it again and runs', ctrl: (s) => { const p = sg(s); if (cx(p) > 75) mem.past = true; return [{ ...walk(p, s.pressed[3] || mem.past ? 92 : 67.4), abilityPressed: !s.pressed[3] && cx(p) < 70 }, walk(sp(s), 89.5)]; },
       done: (s) => near(sg(s), 92) },
-    { name: 'goal', ctrl: (s) => [walk(sg(s), 97.4), walk(sp(s), 97.8)], done: (s) => s.complete },
+    ...skyMore(),
+    toGoal,
+  ];
+}
+
+function skyMore() {
+  const V = chapterById('sky').offsets.vents2;
+  const mem = { stage: 0 };
+  const cloud = (s) => s.ents.filter((e) => e.type === 'platform' && e.look === 'cloud').find((e) => e.path[0][0] === V + 3);
+  return [
+    { name: 'vents: line up', ctrl: (s) => [walk(sg(s), V + 1.4), walk(sp(s), V + 2.5)], done: (s) => near(sg(s), V + 1.4) && near(sp(s), V + 2.5) },
+    { name: 'vents: Spice hops vent to vent', ctrl: (s) => {
+      const p = sp(s);
+      if (mem.stage === 0 && cx(p) > V + 7.5 && p.y < 3) mem.stage = 1;
+      if (mem.stage === 1 && cx(p) > V + 15.5 && p.y < 3) mem.stage = 2;
+      const tx = [V + 8.5, V + 16.5, V + 24.5][mem.stage];
+      return [I, { ...walk(p, tx), jump: true, jumpPressed: p.onGround && cx(p) < V + 4 }];
+    }, done: (s) => sp(s).onGround && cx(sp(s)) > V + 23, max: 1500 },
+    { name: 'vents: Spice on the switch, Sugar on the cloud', ctrl: (s) => [cloud(s).x < V + 3.5 ? walk(sg(s), V + 4.5) : I, walk(sp(s), V + 24.5)],
+      done: (s) => near(sp(s), V + 24.5) && sg(s).ride === cloud(s).i, max: 1500 },
+    { name: 'vents: Sugar rides over', ctrl: (s) => [cloud(s).x > V + 19.5 ? walk(sg(s), V + 23.4) : I, walk(sp(s), V + 24.5)], done: (s) => near(sg(s), V + 23.4), max: 1500 },
+  ];
+}
+
+function clockMore() {
+  const S = chapterById('clock').offsets.stairs;
+  const g1 = (s) => s.ents.find((e) => e.type === 'platform' && e.path[0][0] === S + 4);
+  const hop = (p, tx, top) => (feet(p) < top && p.onGround ? walk(p, tx) : jumpToward(p, tx));
+  const stage = [0, 0];
+  const climb = (who) => (s) => {
+    const p = s.players[who];
+    const tops = s.ents.filter((e) => e.type === 'platform' && e.path[0][0] >= S + 4 && e.path[0][0] <= S + 11).map((e) => e.y);
+    const steps = [[S + 5, tops[0]], [S + 8.5, tops[1]], [S + 12, tops[2]], [S + 16.5, 6]];
+    const k = stage[who];
+    if (p.onGround && Math.abs(feet(p) - steps[k][1]) < 0.06 && Math.abs(cx(p) - steps[k][0]) < 1.2 && k < steps.length - 1) stage[who]++;
+    if (p.onGround && feet(p) > 12.9) stage[who] = 0;   // fell: start again
+    const [tx, top] = steps[stage[who]];
+    return hop(p, tx, top + 0.1);
+  };
+  return [
+    { name: 'stairs: line up', ctrl: (s) => [walk(sg(s), S + 1.0), walk(sp(s), S + 2.4)], done: (s) => near(sg(s), S + 1.0) && near(sp(s), S + 2.4) },
+    { name: 'stairs: Sugar stops the gears mid-swing, Spice climbs', ctrl: (s) => {
+      const hold = s.frozen || (g1(s).y > 11.0 && g1(s).y < 11.5);
+      return [{ ...I, ability: hold }, s.frozen ? climb(1)(s) : I];
+    }, done: (s) => feet(sp(s)) < 6.1 && sp(s).onGround, max: 1500 },
+    { name: 'stairs: Spice on the switch', ctrl: (s) => [{ ...I, ability: true }, walk(sp(s), S + 16.5)], done: (s) => near(sp(s), S + 16.5) && s.pressed[4] },
+    { name: 'stairs: Sugar climbs the stopped gears', ctrl: (s) => [climb(0)(s), walk(sp(s), S + 16.5)], done: (s) => feet(sg(s)) < 6.1 && sg(s).onGround, max: 1500 },
+    { name: 'stairs: on', ctrl: (s) => [walk(sg(s), S + 18), walk(sp(s), S + 18.8)], done: (s) => near(sg(s), S + 18) && near(sp(s), S + 18.8) },
   ];
 }
 
@@ -220,7 +349,8 @@ export function clockPhases() {
       done: (s) => near(sp(s), 88.5) && s.pressed[3], max: 1200 },
     { name: 'Sugar rides the ferry', ctrl: (s) => [s.ents.find((e) => e.type === 'platform' && e.g === 3).x > 80.5 ? walk(sg(s), 86) : I, walk(sp(s), 88.5)],
       done: (s) => near(sg(s), 86), max: 1500 },
-    { name: 'goal', ctrl: (s) => [walk(sg(s), 97.4), walk(sp(s), 97.8)], done: (s) => s.complete },
+    ...clockMore(),
+    toGoal,
   ];
 }
 
