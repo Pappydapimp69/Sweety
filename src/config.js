@@ -44,7 +44,7 @@ export const PAD_POLL_MS = 1000 / 120;
 // ---- chapter 4+ powers
 export const SWAP_COOLDOWN = 0.6;
 export const GUST_LEN = 7;          // tiles in front of Sugar
-export const GUST_H = 3;            // tall box centred on her
+export const GUST_H = 5;            // tall box centred on her
 export const GUST_PUSH = 15;        // horizontal shove
 export const GUST_LIFT = 9;         // and a little lift
 export const GUST_TIME = 0.35;      // how long the shove overrides steering

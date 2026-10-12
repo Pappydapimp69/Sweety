@@ -18,7 +18,7 @@ export const NO_INPUT = Object.freeze({
 // ---------------------------------------------------------------- setup
 
 export function createRun(chapterId, opts = {}) {
-  const ch = chapterById(chapterId);
+  const ch = typeof chapterId === 'object' ? chapterId : chapterById(chapterId);   // tests pass a map
   if (!ch) throw new Error(`no chapter ${chapterId}`);
   const grid = ch.map.map((row) => row.split(''));
   const h = grid.length;
@@ -212,7 +212,7 @@ function updateMovers(s) {
     if (e.type === 'pinwheel') { e.spin = Math.max(0, e.spin - C.DT); continue; }
     if (!e.path) continue;
     if (s.frozen) continue;
-    if (e.g && !s.pressed[e.g]) continue;
+    if (e.g && (e.stop ? s.pressed[e.g] : !s.pressed[e.g])) continue;   // `stop`: a plate halts it
     e.t += C.DT;
     placeMover(e);
   }
@@ -405,7 +405,7 @@ function updatePlayer(s, p, inp) {
   const target = want * C.RUN * (p.size === 'small' ? 0.9 : 1);
   if (p.dashT > 0) {
     p.dashT -= C.DT;
-    p.vx = p.facing * C.DASH_V;
+    p.vx = p.dashT > 0 ? p.facing * C.DASH_V : p.facing * C.RUN;   // ends at running speed, not a slide
     p.vy = 0;
   } else if (p.pushT > 0) {
     p.pushT -= C.DT;   // gusted: the wind steers, not the stick

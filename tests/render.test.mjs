@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createRun, step } from '../src/sim.js';
 import { drawWorld, makeCamera, snapCamera } from '../src/render.js';
 import { CHAPTERS } from '../src/levels.js';
-import { gardenPhases, toolboxPhases, nightPhases } from './phases.mjs';
+import { gardenPhases, toolboxPhases, nightPhases, atticPhases, skyPhases, clockPhases, homePhases } from './phases.mjs';
 
 // a 2D context that accepts every call and every property
 function fakeCtx() {
@@ -18,7 +18,7 @@ function fakeCtx() {
 }
 globalThis.OffscreenCanvas = class { constructor(w, h) { this.width = w; this.height = h; } getContext() { return fakeCtx(); } };
 
-const PHASES = { garden: gardenPhases, toolbox: toolboxPhases, night: nightPhases };
+const PHASES = { garden: gardenPhases, toolbox: toolboxPhases, night: nightPhases, attic: atticPhases, sky: skyPhases, clock: clockPhases, home: () => homePhases(CHAPTERS.find((c) => c.id === 'home')) };
 
 for (const ch of CHAPTERS) {
   test(`render never writes sim state: ${ch.id}`, () => {
