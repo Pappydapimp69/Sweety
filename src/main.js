@@ -2,7 +2,7 @@
 // fades); the run itself is sim.js's.
 import { DT, MAX_STEPS } from './config.js';
 import { CHAPTERS, MINIGAMES, STORY, chapterById } from './levels.js';
-import { createRun, step, NAMES, powerOf } from './sim.js';
+import { createRun, step, NAMES, powerOf, NO_INPUT } from './sim.js';
 import { drawWorld, drawCharacter, snapCamera, makeCamera, textPx, PLAYER_COLORS, heart } from './render.js';
 import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads, padConnected, initTouch, setTouchLayout, touchSeen } from './input.js';
 import { loadProgress, saveProgress } from './save.js';
@@ -22,8 +22,10 @@ export const POWER_NAME = {
 const SHAKE = { thud: 0.25, launch: 0.2, crate: 0.3, glass: 0.25, die: 0.3, boom: 0.6, bonk: 0.2, flood: 0.3 };
 
 const app = {
-  screen: 'title',          // title | menu | chapters | minis | settings | story | play | ending | pause | complete | credits
+  screen: 'splash',         // splash | title | menu | chapters | minis | settings | story | play | ending | pause | complete | credits
   devices: [null, null],    // device claimed by Sugar, Spice
+  active: 0,                // solo: which character the one device drives
+  splashT: 0,
   progress: loadProgress(),
   menuIndex: 0, chapterIndex: 0, miniIndex: 0, pauseIndex: 0, settingsIndex: 0,
   settingsBack: 'menu',
@@ -48,9 +50,10 @@ function touchLayout() {
     { act: 'up', x: pad + r * 1.15, y: by - r * 1.6, r: r * 0.8 }, { act: 'down', x: pad + r * 1.15, y: by + r * 0.05 + r * 0.9, r: r * 0.55 },
     { act: 'a', x: W - pad, y: by - r * 0.6, r: r * 1.1 }, { act: 'b', x: W - pad - r * 2.4, y: by + r * 0.1, r },
     { act: 'pause', x: W / 2, y: r * 0.8, r: r * 0.55 },   // top centre: the corners hold the HUD
+    { act: 'sw', x: W / 2 + r * 1.5, y: r * 0.8, r: r * 0.55 },   // switch / trade characters
   ];
 }
-const TOUCH_GLYPH = { left: '◀', right: '▶', up: '▲', down: '▼', a: 'A', b: 'B', pause: 'II' };
+const TOUCH_GLYPH = { left: '◀', right: '▶', up: '▲', down: '▼', a: 'A', b: 'B', pause: 'II', sw: '⇄' };
 function drawTouch() {
   if (!touchSeen && !app.devices.includes('touch')) return;
   for (const b of touchLayout()) {
@@ -73,7 +76,9 @@ function resize() {
   setTouchLayout(touchLayout());
 }
 
-const devOf = (i) => (app.online ? (i === app.online.slot ? app.devices[0] : null) : app.devices[i]);
+// one device on the couch and not online: it drives one character at a time, switch flips which
+const soloLocal = () => !app.online && !!app.devices[0] && !app.devices[1];
+const devOf = (i) => (app.online ? (i === app.online.slot ? app.devices[0] : null) : soloLocal() ? app.devices[0] : app.devices[i]);
 const localDevices = () => (app.online ? [app.devices[0]] : app.devices);
 const remoteName = (i) => (app.online && i !== app.online.slot ? 'online' : null);
 function say(msg) { app.toastMsg = { text: msg, life: 3 }; }
@@ -251,6 +256,7 @@ function menuInput() {
 function updateTitle() {
   for (const d of ALL_DEVICES) {
     const r = read(d);
+    if (app.devices.includes(d) && (r.leftPressed || r.rightPressed || r.switchPressed)) { swapSides(); return; }
     if (!r.jumpPressed) continue;
     if (app.devices.includes(d)) {
       if (app.devices[0] && app.devices[1]) { sfx('confirm'); go('menu'); return; }
@@ -265,7 +271,7 @@ function updateTitle() {
   }
 }
 
-const twoHere = () => (app.devices[0] && app.devices[1]) || (app.online && app.online.status === 'connected');
+const twoHere = () => (app.devices[0] && app.devices[1]) || (app.online && app.online.status === 'connected') || soloLocal();
 const needTwo = () => say('Two players needed: join a second controller or keyboard half on the title screen, or play online.');
 const MAIN_MENU = [
   { label: 'Story', go: () => { if (!twoHere()) return needTwo(); app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); } },
@@ -479,7 +485,7 @@ function updatePlay(dt) {
   let steps = 0;
   if (app.turbo) acc = DT * app.turbo;   // browser tests: many steps per frame
   while (acc >= DT && steps < (app.turbo || MAX_STEPS)) {
-    const inputs = app.driver ? app.driver(app.run) : app.devices.map((d) => read(d));
+    const inputs = app.driver ? app.driver(app.run) : localInputs();
     if (app.regroup) { inputs[0] = { ...inputs[0], regroup: true }; app.regroup = false; }
     step(app.run, inputs);   // run the tick first: the partner's jump pressed with the pause still counts
     onEvents(app.run.events);
@@ -488,6 +494,27 @@ function updatePlay(dt) {
     if (app.run.complete) { app.ending = app.run.mode === 'chapter' ? 1.4 : 1.8; app.screen = 'ending'; return; }
   }
   if (steps >= MAX_STEPS && !app.turbo) acc = 0;   // fell behind: drop the debt, don't spiral
+}
+
+function localInputs() {
+  if (soloLocal()) {
+    const r = read(app.devices[0]);
+    if (r.switchPressed) { app.active = 1 - app.active; sfx('confirm'); }
+    const inputs = [NO_INPUT, NO_INPUT];
+    inputs[app.active] = r;
+    return inputs;
+  }
+  const inputs = app.devices.map((d) => read(d));
+  if (inputs.some((r) => r.switchPressed)) swapSides();
+  return inputs;
+}
+
+// the two on the couch trade characters (the devices change hands, the world doesn't)
+function swapSides() {
+  app.devices = [app.devices[1], app.devices[0]];
+  app.active = 1 - app.active;
+  sfx('confirm');
+  say(`Swapped! ${NAMES[0]}: ${app.devices[0] ? labelsFor(app.devices[0]).name : 'nobody yet'} · ${NAMES[1]}: ${app.devices[1] ? labelsFor(app.devices[1]).name : 'nobody yet'}`);
 }
 
 function onEvents(events) {
@@ -630,6 +657,55 @@ function navHint() {
 
 // ---------------------------------------------------------------- screens
 
+// ---- ZanePaul Studios: types "Stupido", thinks better of it, backspaces to "Stu", types "dios".
+const SPLASH_TYPE = 0.11, SPLASH_ERASE = 0.09;
+const SPLASH_SCRIPT = (() => {
+  const steps = [];   // [time, text]
+  let t = 0.6, txt = '';
+  const type = (str) => { for (const c of str) { txt += c; t += SPLASH_TYPE; steps.push([t, txt]); } };
+  const erase = (n) => { for (let i = 0; i < n; i++) { txt = txt.slice(0, -1); t += SPLASH_ERASE; steps.push([t, txt]); } };
+  type('Stupido');
+  t += 0.9;           // the beat: let it sink in
+  erase(4);
+  t += 0.35;
+  type('dios');
+  return { steps, end: t + 1.4 };
+})();
+function splashText(t) {
+  let out = '';
+  for (const [at, s] of SPLASH_SCRIPT.steps) if (at <= t) out = s;
+  return out;
+}
+
+function updateSplash(dt) {
+  const before = splashText(app.splashT);
+  app.splashT += dt;
+  if (splashText(app.splashT) !== before) sfx('tick');
+  let skip = false;
+  for (const d of ALL_DEVICES) { const r = read(d); skip ||= r.jumpPressed || r.okPressed || r.backPressed || r.pausePressed; }
+  if (app.splashT > SPLASH_SCRIPT.end || (skip && app.splashT > 0.3)) { app.fade = 1; go('title'); }
+}
+
+function drawSplash() {
+  const t = app.splashT;
+  ctx.fillStyle = '#14101f'; ctx.fillRect(0, 0, W, H);
+  const big = Math.max(34, Math.min(W * 0.11, H * 0.16));
+  const a = Math.min(1, t / 0.5) * Math.min(1, Math.max(0, (SPLASH_SCRIPT.end - t) / 0.5));
+  ctx.globalAlpha = a;
+  txt('ZanePaul', W / 2, H * 0.42, { size: big, color: '#ffafcc' });
+  const word = splashText(t);
+  ctx.font = `700 ${big * 0.7}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  const full = ctx.measureText('Studios').width;   // the word's slot never moves as it is typed
+  const left = W / 2 - full / 2;
+  txt(word, left, H * 0.42 + big * 0.95, { size: big * 0.7, color: '#a2d2ff', align: 'left' });
+  if (Math.floor(t * 2.5) % 2 === 0 || (t > 0.6 && t < SPLASH_SCRIPT.end - 1.2)) {   // caret: solid while typing, blinks at rest
+    const w = ctx.measureText(word).width;
+    ctx.fillStyle = '#a2d2ff';
+    ctx.fillRect(left + w + 4, H * 0.42 + big * 0.95 - big * 0.32, Math.max(3, big * 0.06), big * 0.64);
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawTitle() {
   softBackground('#ffafcc', '#a2d2ff');
   const big = Math.max(48, Math.min(W, H) * 0.15);
@@ -652,9 +728,9 @@ function drawTitle() {
   const lines = app.pendingJoin
     ? [`Joining your partner's online game (code ${app.pendingJoin}).`, 'Press jump on your controller or keyboard.']
     : ready
-    ? ['Both here! Either of you press jump to start.']
+    ? ['Both here! Either of you press jump to start.', `Want the other character? Press left or right to trade places (in a level: ${labelsFor(app.devices[0]).switch} or ${labelsFor(app.devices[1]).switch}).`]
     : app.devices[0]
-    ? ['Waiting for player two to press jump.', 'Playing online on your own? Press jump again to go on alone.']
+    ? ['Waiting for player two to press jump.', `Alone? Press jump again: you'll play both, ${labelsFor(app.devices[0]).switch} switches who you are. Left/right picks your side.`]
     : ['Keyboard left half: jump is W  ·  right half: jump is ↑  ·  controller or touch screen: A',
        pads ? `${pads} controller${pads > 1 ? 's' : ''} found. Press A on yours to join.` : 'Controllers: press any button first so the browser can see them.'];
   lines.forEach((l, i) => txt(l, W / 2, H * 0.8 + i * textPx(H) * 1.6, { size: textPx(H) * (i ? 0.75 : 0.9), color: '#3c096c', shadow: false, weight: i ? '500' : '700' }));
@@ -804,6 +880,7 @@ function drawPlay() {
   drawWorld(ctx, s, app.cam, W, H, app.fx, ch.theme, app.t);
   drawSigns(s);
   drawBubbles(s);
+  if (soloLocal() && s.mode === 'chapter') drawActiveMarker(s);
   ctx.restore();
   const P = textPx(H);
   txt(ch.name, 16, 24, { align: 'left', size: P });
@@ -822,8 +899,12 @@ function drawPlay() {
   for (let i = 0; i < 2; i++) {
     const L = labelsFor(devOf(i));
     const power = powerOf(s, s.players[i]);
-    const line = remoteName(i) ? `${NAMES[i]} (online) · ${POWER_NAME[power] || power}` : `${NAMES[i]}: move ${L.move} · jump ${L.jump} · ${POWER_NAME[power] || power}${power === 'glide' ? '' : ` ${L.ability}`}`;
+    const line = remoteName(i) ? `${NAMES[i]} (online) · ${POWER_NAME[power] || power}`
+      : soloLocal() && i !== app.active ? `${NAMES[i]}: ${L.switch} to play ${NAMES[i]}`
+      : `${NAMES[i]}: move ${L.move} · jump ${L.jump} · ${POWER_NAME[power] || power}${power === 'glide' ? '' : ` ${L.ability}`}`;
+    ctx.globalAlpha = soloLocal() && i !== app.active ? 0.6 : 1;
     txt(line, i ? W - 16 : 16, H - 22, { align: i ? 'right' : 'left', size: P * 0.72, color: PLAYER_COLORS[i], weight: '600' });
+    ctx.globalAlpha = 1;
   }
   txt(`pause: ${labelsFor(app.devices[0]).pause}`, W / 2, H - 22, { size: P * 0.65, color: 'rgba(255,255,255,0.7)', weight: '500' });
   if (app.online && (app.online.stall > 0.8 || app.online.partnerPaused) && app.screen === 'play') {
@@ -854,6 +935,20 @@ function drawPlay() {
 }
 
 // A sign reads itself out when either of you stands near it, in your own buttons.
+// solo: a bobbing arrow over the character the device is driving right now
+function drawActiveMarker(s) {
+  const p = s.players[app.active];
+  if (!p || p.dead) return;
+  const k = app.cam.scale;
+  const x = W / 2 + (p.x + p.w / 2 - app.cam.x) * k;
+  const top = (p.grav < 0 ? p.y + p.h + 0.9 : p.y - 0.5);
+  const y = H / 2 + (top - app.cam.y) * k + Math.sin(app.t * 6) * 4 * (p.grav < 0 ? -1 : 1);
+  const r = Math.max(7, k * 0.32), dir = p.grav < 0 ? -1 : 1;
+  ctx.fillStyle = PLAYER_COLORS[app.active]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x - r, y - r * dir); ctx.lineTo(x + r, y - r * dir); ctx.lineTo(x, y); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+}
+
 function drawSigns(s) {
   const k = app.cam.scale, P = textPx(H) * 0.82;
   for (const e of s.ents) {
@@ -951,6 +1046,7 @@ function frame(now) {
   app.t += dt;
   watchPads();
   switch (app.screen) {
+    case 'splash': updateSplash(dt); if (app.screen === 'splash') drawSplash(); break;
     case 'title': updateTitle(); drawTitle(); break;
     case 'menu': updateMenu(); drawMenu(); break;
     case 'chapters': updateChapters(); drawChapters(); break;
@@ -1016,6 +1112,8 @@ window.addEventListener('keydown', (e) => {
 // A link with ?join=CODE goes straight to joining after the first player joins.
 const joinParam = new URLSearchParams(location.search).get('join');
 if (joinParam && /^[A-Z]{4}$/i.test(joinParam)) app.pendingJoin = joinParam.toUpperCase();
+// automated browsers skip the splash unless a test asks for it (?splash)
+if (navigator.webdriver && !new URLSearchParams(location.search).has('splash')) app.screen = 'title';
 onAnyKey(() => { unlockAudio(); applyVolumes(); });
 window.addEventListener('pointerdown', () => { unlockAudio(); applyVolumes(); });
 applyVolumes();

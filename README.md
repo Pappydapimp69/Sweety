@@ -23,12 +23,19 @@ at https://pappydapimp69.github.io/Sweety/ (the path is case-sensitive).
 ## Controls
 Each player presses **jump** on their own device to join.
 
-| | move | jump | power | menus: ok / back | pause |
-|---|---|---|---|---|---|
-| keyboard, left half | A / D | W | E | Space / Esc | Esc |
-| keyboard, right half | ← / → | ↑ | Enter | Enter / Esc | Esc |
-| controller | left stick | A | X | A / B | Start |
-| touch screen | ◀ ▶ on screen | A | B | A / B | II |
+| | move | jump | power | switch | menus: ok / back | pause |
+|---|---|---|---|---|---|---|
+| keyboard, left half | A / D | W | E | Tab | Space / Esc | Esc |
+| keyboard, right half | ← / → | ↑ | Enter | / | Enter / Esc | Esc |
+| controller | left stick | A | X | Y | A / B | Start |
+| touch screen | ◀ ▶ on screen | A | B | ⇄ | A / B | II |
+
+**Switching characters.** On the title screen, press left or right to trade
+sides. In a level, **switch** hands the characters over between you (nobody
+moves). Playing alone? Join, then press jump again: one device plays both,
+and **switch** changes which one you drive (an arrow marks it). A few timing
+puzzles are meant for two pairs of hands, so solo is best for trying things
+out.
 
 Controllers: press any button first so the browser can see them. Touch
 buttons appear the first time you touch the screen, so each of you can play
@@ -81,4 +88,5 @@ directly.
 - `node tests/gamepad.mjs`: two emulated controllers covering join, menus, stick deadzone and unplug-pauses.
 - `node tests/online.mjs [dir]`: two browsers play a chapter online through the real broker.
 - `node tests/touch.mjs [dir]`: real multi-touch events. Hold ▶ with one finger and tap A with another.
+- `node tests/switch.mjs [dir]`: the splash (`?splash`), trading characters on the title and in a level, and solo switching.
 - Design notes: `docs/blueprint.md`.
