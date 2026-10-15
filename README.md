@@ -18,7 +18,7 @@ python3 -m http.server 8000   # then open http://localhost:8000
 
 To host it on GitHub Pages: repo **Settings → Pages → Build and deployment →
 Deploy from a branch**, then choose this branch and `/ (root)`. The game will be
-at `https://<you>.github.io/sweety/`.
+at https://pappydapimp69.github.io/Sweety/ (the path is case-sensitive).
 
 ## Controls
 Each player presses **jump** on their own device to join.
