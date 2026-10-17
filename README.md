@@ -54,6 +54,11 @@ controller unplugs mid-chapter, the game pauses.
 | 7 | Home | every power pair again, zone by zone, then a climb ahead of rising water | |
 
 Every puzzle has a **?** sign that explains itself when you walk up to it.
+
+Each chapter ends on a **twist room** that turns something it taught you on its
+head. Its sign gives a hint rather than the answer:
+*Let go* (garden), *Leapfrog* (toolbox), *Hang back* (night), *The well*
+(attic), *One gust* (sky) and *Take turns* (clocktower).
 Hearts are hidden in each chapter.
 
 **Mini-games:** Bonk! (land on their head), Heart Rain (catch the most),
@@ -79,6 +84,7 @@ directly.
   - level lint and physics for every power
   - scripted bots that play **every chapter** through
   - solo negative controls proving each co-op gate needs both players
+  - the twist rooms: each needs both of you, and its trick is the way through, with a control beside every "can't"
   - a check that the renderer never touches game state
   - online lockstep, replaying a whole chapter through two laggy peers
   - a seeded button-mashing fuzzer on every level, also started from mid-route states (no NaN, nobody stuck in a wall, deterministic)
