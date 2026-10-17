@@ -57,9 +57,14 @@ const TOUCH_GLYPH = { left: '◀', right: '▶', up: '▲', down: '▼', a: 'A',
 function drawTouch() {
   if (!touchSeen && !app.devices.includes('touch')) return;
   for (const b of touchLayout()) {
-    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2;
+    const g = ctx.createLinearGradient(0, b.y - b.r, 0, b.y + b.r);
+    g.addColorStop(0, 'rgba(255,255,255,0.34)'); g.addColorStop(1, 'rgba(255,255,255,0.12)');
+    ctx.fillStyle = 'rgba(20,10,40,0.22)'; ctx.beginPath(); ctx.arc(b.x, b.y + 3, b.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = g; ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    txt(TOUCH_GLYPH[b.act], b.x, b.y, { size: b.r * 0.8, color: 'rgba(255,255,255,0.9)', shadow: false });
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.82, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+    txt(TOUCH_GLYPH[b.act], b.x, b.y, { size: b.r * 0.8, color: 'rgba(255,255,255,0.95)', shadow: true });
   }
   if (H > W) {   // a phone held upright: the world is tiny
     panel(W * 0.1, H * 0.06, W * 0.8, textPx(H) * 2.4, 'rgba(20,16,40,0.8)');
@@ -590,16 +595,36 @@ function fillTokens(text, dev) {
   return text.replace('{ability}', L.ability).replace('{jump}', L.jump).replace('{move}', L.move);
 }
 
+const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 function txt(str, x, y, { size = textPx(H), color = '#fff', align = 'center', weight = '700', shadow = true } = {}) {
-  ctx.font = `${weight} ${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  ctx.font = `${weight} ${size}px ${FONT}`;
   ctx.textAlign = align; ctx.textBaseline = 'middle';
-  if (shadow) { ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillText(str, x + 2, y + 2); }
+  if (shadow) {   // a soft dark edge and a drop, so light text reads on any background
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(40, 14, 60, 0.35)'; ctx.lineWidth = Math.max(2, size * 0.14);
+    ctx.strokeText(str, x, y + Math.max(1, size * 0.06));
+    ctx.fillStyle = 'rgba(40, 14, 60, 0.4)'; ctx.fillText(str, x, y + Math.max(1.5, size * 0.07));
+  }
   ctx.fillStyle = color; ctx.fillText(str, x, y);
 }
 
-function panel(x, y, w, h, color = 'rgba(20, 16, 40, 0.72)', r = 14) {
+function roundPath(x, y, w, h, r) {
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+}
+
+// Glass: the fill, a soft drop shadow under it, a sheen on the upper half and a light top edge.
+function panel(x, y, w, h, color = 'rgba(28, 20, 52, 0.72)', r = 16) {
+  ctx.fillStyle = 'rgba(30, 10, 50, 0.16)';
+  roundPath(x, y + Math.max(3, h * 0.03), w, h, r); ctx.fill();
   ctx.fillStyle = color;
-  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); ctx.fill();
+  roundPath(x, y, w, h, r); ctx.fill();
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, 'rgba(255,255,255,0.16)'); g.addColorStop(0.5, 'rgba(255,255,255,0.03)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(x + r, y + 1); ctx.lineTo(x + w - r, y + 1); ctx.stroke();
 }
 
 function wrapLines(text, maxW, size, weight = '500') {
@@ -619,10 +644,33 @@ function wrap(text, cx, y, maxW, color, size = textPx(H) * 0.75) {
   wrapLines(text, maxW, size).forEach((l, i) => txt(l, cx, y + i * size * 1.3, { size, color, shadow: false, weight: '500' }));
 }
 
+// The menu backdrop: a diagonal gradient, big soft lights and a gentle vignette, painted once
+// per colour pair and screen size, then blitted (full-screen gradients are costly every frame).
+const bgCache = new Map();
 function softBackground(c1, c2) {
-  const g = ctx.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, c1); g.addColorStop(1, c2);
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const key = `${c1}${c2}${W}x${H}`;
+  let bg = bgCache.get(key);
+  if (!bg) {
+    if (bgCache.size > 6) bgCache.clear();
+    bg = document.createElement('canvas'); bg.width = Math.max(1, Math.ceil(W / 2)); bg.height = Math.max(1, Math.ceil(H / 2));
+    const b = bg.getContext('2d', { willReadFrequently: true });   // painted once in software at half size (it is all soft), uploaded once
+    b.scale(0.5, 0.5);
+    const g = b.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, c1); g.addColorStop(1, c2);
+    b.fillStyle = g; b.fillRect(0, 0, W, H);
+    const R = Math.max(W, H) * 0.45;
+    for (let i = 0; i < 3; i++) {
+      const x = W * (0.2 + 0.3 * i), y = H * (0.3 + (i % 2) * 0.4);
+      const rg = b.createRadialGradient(x, y, 0, x, y, R);
+      rg.addColorStop(0, 'rgba(255,255,255,0.28)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+      b.fillStyle = rg; b.fillRect(x - R, y - R, R * 2, R * 2);
+    }
+    const v = b.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.4, W / 2, H / 2, Math.max(W, H) * 0.75);
+    v.addColorStop(0, 'rgba(60,20,80,0)'); v.addColorStop(1, 'rgba(60,20,80,0.18)');
+    b.fillStyle = v; b.fillRect(0, 0, W, H);
+    bgCache.set(key, bg);
+  }
+  ctx.drawImage(bg, 0, 0, W, H);
   for (let i = 0; i < 14; i++) {   // drifting hearts
     const x = ((i * 173 + app.t * 18 * (1 + (i % 3) * 0.3)) % (W + 80)) - 40;
     const y = H - ((i * 97 + app.t * 26 * (1 + (i % 4) * 0.2)) % (H + 80)) + 40;
@@ -632,19 +680,33 @@ function softBackground(c1, c2) {
   ctx.globalAlpha = 1;
 }
 
+function groundShadow(cx, y, w, a = 0.22) {
+  ctx.save(); ctx.translate(cx, y); ctx.scale(1, 0.25);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, w);
+  g.addColorStop(0, `rgba(40,10,60,${a})`); g.addColorStop(1, 'rgba(40,10,60,0)');
+  ctx.fillStyle = g; ctx.fillRect(-w, -w, w * 2, w * 2);
+  ctx.restore();
+}
+
 function couple(cx, baseY, size, hop = true) {
   for (let i = 0; i < 2; i++) {
     const w = size * 0.6, h = size;
     const jump = hop ? Math.max(0, Math.sin(app.t * 3 + i * 1.4)) * size * 0.25 : 0;
+    groundShadow(cx + (i ? size * 0.15 : -size * 0.75) + w / 2, baseY, w * (0.8 - jump / size), 0.25);
     drawCharacter(ctx, i, cx + (i ? size * 0.15 : -size * 0.75), baseY - h - jump, w, h, { facing: i ? -1 : 1, t: app.t, airborne: jump > 1, k: size / 1.25 });
   }
-  heart(ctx, cx, baseY - size * 1.55 + Math.sin(app.t * 2) * 4, size * 0.16, '#ff4d6d');
+  heart(ctx, cx, baseY - size * 1.55 + Math.sin(app.t * 2) * 4, size * 0.16, '#ff4d6d', true);
 }
 
 function menuList(items, x, y, sel, P) {
   items.forEach((label, i) => {
     const s = i === sel;
-    if (s) panel(x - 180, y + i * P * 2.4 - P * 1.0, 360, P * 2, 'rgba(255,255,255,0.85)', 12);
+    if (s) {
+      const pw = Math.min(380, W - 32), py = y + i * P * 2.4 - P * 1.0;
+      panel(x - pw / 2, py, pw, P * 2, 'rgba(255,255,255,0.9)', P);
+      heart(ctx, x - pw / 2 + P * 1.1, py + P, P * 0.36, '#ff4d6d', true);
+      heart(ctx, x + pw / 2 - P * 1.1, py + P, P * 0.36, '#ff4d6d', true);
+    }
     txt(label, x, y + i * P * 2.4, { size: P * 1.1, color: s ? '#7b2cbf' : '#ffffff', shadow: !s });
   });
 }
@@ -689,6 +751,9 @@ function updateSplash(dt) {
 function drawSplash() {
   const t = app.splashT;
   ctx.fillStyle = '#14101f'; ctx.fillRect(0, 0, W, H);
+  const sg = ctx.createRadialGradient(W / 2, H * 0.47, 0, W / 2, H * 0.47, Math.max(W, H) * 0.5);
+  sg.addColorStop(0, 'rgba(123,44,191,0.28)'); sg.addColorStop(1, 'rgba(123,44,191,0)');
+  ctx.fillStyle = sg; ctx.fillRect(0, 0, W, H);
   const big = Math.max(34, Math.min(W * 0.11, H * 0.16));
   const a = Math.min(1, t / 0.5) * Math.min(1, Math.max(0, (SPLASH_SCRIPT.end - t) / 0.5));
   ctx.globalAlpha = a;
@@ -706,18 +771,41 @@ function drawSplash() {
   ctx.globalAlpha = 1;
 }
 
+// The logo: a warm glow behind, a deep outline, a candy gradient and a gloss.
+function logo(text, cx, cy, size) {
+  const R = size * 2.2;
+  const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  rg.addColorStop(0, 'rgba(255,255,255,0.55)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = rg; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  ctx.font = `900 ${size}px ${FONT}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.fillStyle = 'rgba(90, 24, 154, 0.35)'; ctx.fillText(text, cx, cy + size * 0.07);
+  ctx.strokeStyle = '#7b2cbf'; ctx.lineWidth = size * 0.11; ctx.strokeText(text, cx, cy);
+  const g = ctx.createLinearGradient(0, cy - size * 0.5, 0, cy + size * 0.5);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(0.55, '#ffe3ef'); g.addColorStop(1, '#ff9ec7');
+  ctx.fillStyle = g; ctx.fillText(text, cx, cy);
+  heart(ctx, cx + ctx.measureText(text).width / 2 + size * 0.2, cy - size * 0.32, size * 0.16, '#ff4d6d', true);
+}
+
 function drawTitle() {
   softBackground('#ffafcc', '#a2d2ff');
   const big = Math.max(48, Math.min(W, H) * 0.15);
-  txt('Sweety', W / 2, H * 0.17 + Math.sin(app.t * 2) * 6, { size: big, color: '#fff' });
-  txt('a game for two', W / 2, H * 0.17 + big * 0.68, { size: textPx(H) * 1.1, color: '#5a189a' });
+  logo('Sweety', W / 2, H * 0.17 + Math.sin(app.t * 2) * 6, big);
+  txt('a game for two', W / 2, H * 0.17 + big * 0.72, { size: textPx(H) * 1.1, color: '#5a189a', shadow: false, weight: '800' });
 
   const bw = Math.min(360, W * 0.42), bh = Math.max(130, H * 0.24);
   for (let i = 0; i < 2; i++) {
     const x = W / 2 + (i ? 12 : -12 - bw), y = H * 0.44;
-    panel(x, y, bw, bh, 'rgba(255,255,255,0.55)');
     const d = app.devices[i];
+    panel(x, y, bw, bh, d ? 'rgba(255,255,255,0.78)' : 'rgba(255,255,255,0.5)', 20);
     const sz = bh * 0.38;
+    if (d) {
+      const R = sz * 0.9, gx = x + bw / 2, gy = y + bh * 0.08 + sz * 0.5;
+      const rg = ctx.createRadialGradient(gx, gy, 0, gx, gy, R);
+      rg.addColorStop(0, i ? 'rgba(46,196,182,0.35)' : 'rgba(255,126,182,0.35)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = rg; ctx.fillRect(gx - R, gy - R, R * 2, R * 2);
+    }
+    groundShadow(x + bw / 2, y + bh * 0.08 + sz, sz * 0.4, d ? 0.3 : 0.15);
     drawCharacter(ctx, i, x + bw / 2 - sz * 0.3, y + bh * 0.08 + (d ? -Math.abs(Math.sin(app.t * 4)) * 6 : 0), sz * 0.6, sz, { facing: i ? -1 : 1, t: app.t, k: sz / 1.25, alpha: d ? 1 : 0.55 });
     txt(NAMES[i], x + bw / 2, y + bh * 0.64, { color: '#3c096c', shadow: false });
     txt(d ? `joined on ${labelsFor(d).name}` : 'press jump to join', x + bw / 2, y + bh * 0.85,
@@ -739,7 +827,7 @@ function drawTitle() {
 function drawMenu() {
   softBackground('#cdb4db', '#ffc8dd');
   const P = textPx(H);
-  txt('Sweety', W / 2, H * 0.14, { size: P * 3 });
+  logo('Sweety', W / 2, H * 0.14, P * 3);
   couple(W / 2, H * 0.42, Math.min(110, H * 0.14));
   menuList(MAIN_MENU.map((m) => m.label), W / 2, H * 0.52, app.menuIndex, P);
   navHint();
@@ -759,7 +847,8 @@ function cards(items, sel, title, sub) {
     const total = inRow * cw + (inRow - 1) * 16;
     const x = (W - total) / 2 + c * (cw + 16), y = H * 0.2 + r * (ch + 16);
     const s = i === sel;
-    panel(x - (s ? 6 : 0), y - (s ? 6 : 0), cw + (s ? 12 : 0), ch + (s ? 12 : 0), s ? '#ffffff' : 'rgba(255,255,255,0.55)');
+    panel(x - (s ? 6 : 0), y - (s ? 10 : 0), cw + (s ? 12 : 0), ch + (s ? 12 : 0), s ? 'rgba(255,255,255,0.97)' : 'rgba(255,255,255,0.55)', 18);
+    if (s) { ctx.strokeStyle = '#ff7eb6'; ctx.lineWidth = 3; roundPath(x - 6, y - 10, cw + 12, ch + 12, 18); ctx.stroke(); }
     const col = it.locked ? '#adb5bd' : '#3c096c';
     txt(it.kicker, x + cw / 2, y + ch * 0.14, { size: P * 0.72, color: col, shadow: false, weight: '600' });
     txt(it.name, x + cw / 2, y + ch * 0.3, { size: P * 1.05, color: col, shadow: false });
@@ -883,6 +972,10 @@ function drawPlay() {
   if (soloLocal() && s.mode === 'chapter') drawActiveMarker(s);
   ctx.restore();
   const P = textPx(H);
+  // the HUD sits on soft dark fades rather than boxes
+  const fade = ctx.createLinearGradient(0, 0, 0, P * 3.2);
+  fade.addColorStop(0, 'rgba(20,10,35,0.35)'); fade.addColorStop(1, 'rgba(20,10,35,0)');
+  ctx.fillStyle = fade; ctx.fillRect(0, 0, W, P * 3.2);
   txt(ch.name, 16, 24, { align: 'left', size: P });
   if (s.mode !== 'chapter') {
     txt(`${s.score[0]}`, W / 2 - 60, 40, { size: P * 2.2, color: PLAYER_COLORS[0] });
@@ -891,11 +984,18 @@ function drawPlay() {
     if (s.mode === 'rain') txt(`${Math.max(0, Math.ceil(s.timeLeft))}s`, W / 2, 40 + P * 1.8, { size: P });
     if (s.mode === 'potato') txt(`round ${s.round}`, W / 2, 40 + P * 1.8, { size: P * 0.8 });
   } else if (s.heartsTotal) {
-    txt(`♥ ${s.hearts} / ${s.heartsTotal}`, W - 16, 24, { align: 'right', size: P, color: '#ffccd5' });
+    const label = `${s.hearts} / ${s.heartsTotal}`;
+    ctx.font = `700 ${P}px ${FONT}`;
+    const tw = ctx.measureText(label).width, pw = tw + P * 2.6;
+    panel(W - 12 - pw, 24 - P * 0.85, pw, P * 1.7, 'rgba(28,20,52,0.55)', P * 0.85);
+    heart(ctx, W - 12 - pw + P * 0.95, 24, P * 0.42, '#ff4d6d', true);
+    txt(label, W - 12 - P * 0.7, 24, { align: 'right', size: P, color: '#ffe3ea', shadow: false });
   }
-  if (s.gentle) txt('gentle mode', W - 16, 24 + P * 1.4, { align: 'right', size: P * 0.65, color: 'rgba(255,255,255,0.75)', weight: '500' });
+  if (s.gentle) txt('gentle mode', W - 16, 24 + P * 1.6, { align: 'right', size: P * 0.65, color: 'rgba(255,255,255,0.75)', weight: '500' });
   // each player's buttons, in their own corner, named for their own device
-  ctx.fillStyle = 'rgba(15, 10, 30, 0.6)'; ctx.fillRect(0, H - 22 - P * 0.75, W, P * 1.5);
+  const bar = ctx.createLinearGradient(0, H - 22 - P * 1.6, 0, H);
+  bar.addColorStop(0, 'rgba(15,10,30,0)'); bar.addColorStop(0.45, 'rgba(15,10,30,0.55)'); bar.addColorStop(1, 'rgba(15,10,30,0.7)');
+  ctx.fillStyle = bar; ctx.fillRect(0, H - 22 - P * 1.6, W, P * 1.6 + 22);
   for (let i = 0; i < 2; i++) {
     const L = labelsFor(devOf(i));
     const power = powerOf(s, s.players[i]);
