@@ -422,7 +422,7 @@ export function clockPhases() {
   return [
     { name: 'to the corridor', ctrl: (s) => [walk(sg(s), 8.6), walk(sp(s), 10.4)], done: (s) => near(sg(s), 8.6) && near(sp(s), 10.4) },
     { name: 'Sugar freezes the saws up, Spice walks', ctrl: (s) => {
-      const freeze = s.frozen || sawsUp(s, [14.5, 17.5, 20.5]);
+      const freeze = s.frozen || sawsUp(s, [14.5, 16, 17.5, 19, 20.5]);
       return [{ ...I, ability: freeze && cx(sp(s)) < 23 }, s.frozen ? walk(sp(s), 23.3) : I];
     }, done: (s) => near(sp(s), 23.3), max: 1200 },
     { name: 'Spice dashes the glass', ctrl: (s) => [I, A({ right: true })], done: (s) => s.grid[12][24] === '.' },

@@ -242,3 +242,43 @@ test('clock "take turns": Sugar can\'t walk while she holds time (so she needs h
   for (let t = 0; t < 120; t++) step(s, [{ ...walk(sg, o + 24), ability: true }, I]);
   assert.ok(s.frozen && Math.abs(cx(sg) - x0) < 0.05);
 });
+
+// ---------------------------------------------------------------- saw corridors have no pockets
+// A lone player waiting between two saws and moving on whenever the next one is up got
+// through the old corridors (saws 3 apart) in 20 of 24 starts. Saws 1.5 apart leave no
+// gap a body fits in, so only Sugar holding time gets anyone through.
+function pocketHop(ch, x0, x1, keep) {
+  let ok = 0;
+  for (const who of [0, 1]) for (let k = 0; k < 72; k += 6) {
+    const s = createRun(ch);
+    s.ents = s.ents.filter((e) => e.type !== 'saw' || e.x < x0 || e.x > x1 || keep(e.path[0][0] - x0));
+    const p = s.players[who], o = s.players[1 - who];
+    put(p, x0 - 2.5, 13); put(o, x0 - 5, 13);
+    for (let t = 0; t < k; t++) step(s, [I, I]);
+    const saws = s.ents.filter((e) => e.type === 'saw' && e.x > x0 - 0.1 && e.x < x1 + 0.1).sort((a, b) => a.x - b.x);
+    const stops = [...saws.map((e) => e.x + 0.75 + p.w / 2 + 0.05), x1 + 1.2];
+    let i = 0;
+    for (let t = 0; t < 1500 && !p.dead && i < stops.length; t++) {
+      const next = saws[i];
+      const go = !next || next.y < 10.9 || cx(p) > next.x + 0.9;
+      const inp = [I, I];
+      inp[who] = go ? walk(p, stops[i]) : I;
+      step(s, inp);
+      if (Math.abs(cx(p) - stops[i]) < 0.15 && p.onGround) i++;
+    }
+    if (!p.dead && i === stops.length) ok++;
+  }
+  return ok;
+}
+for (const [ch, x0] of [['clock', 14.5], ['home', null]]) {
+  test(`${ch}: nobody hops the saw corridor alone, saw by saw`, () => {
+    const s = createRun(ch);
+    const first = x0 ?? Math.min(...s.ents.filter((e) => e.type === 'saw').map((e) => e.x));
+    assert.equal(pocketHop(ch, first, first + 6, () => true), 0);
+  });
+  test(`${ch} control: with the old spacing (3 apart) the same hopper gets through`, () => {
+    const s = createRun(ch);
+    const first = x0 ?? Math.min(...s.ents.filter((e) => e.type === 'saw').map((e) => e.x));
+    assert.ok(pocketHop(ch, first, first + 6, (dx) => dx % 3 === 0) > 0);
+  });
+}
