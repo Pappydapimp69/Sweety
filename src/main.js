@@ -22,7 +22,7 @@ const ctx = canvas.getContext('2d');
 let W = 0, H = 0;
 
 export const POWER_NAME = {
-  none: 'wave', vine: 'grow a vine', shove: 'shove', nail: 'nail gun', hammer: 'hammer', pin: 'pin', slam: 'slam (in the air)', lantern: 'shine (hold)', size: 'shrink / grow',
+  none: 'wave', vine: 'vine lasso (hold)', shove: 'shove', nail: 'nail gun', hammer: 'hammer', pin: 'pin', slam: 'slam (in the air)', lantern: 'shine (hold)', size: 'shrink / grow',
   swap: 'swap places', flip: 'flip gravity', gust: 'gust', glide: 'glide: hold jump', freeze: 'stop time (hold)', dash: 'dash',
 };
 const SHAKE = { thud: 0.25, launch: 0.2, crate: 0.3, glass: 0.25, die: 0.3, boom: 0.6, bonk: 0.2, flood: 0.3 };

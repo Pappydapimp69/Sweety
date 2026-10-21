@@ -12,9 +12,11 @@ const EPS = 1e-6;
 //   .  ground   #  wall   T  tree   w  water   o  pit   ^  spikes   =  planks   u  a sunk crate
 //   1-4 plate   5-8 heavy plate   A-D door (open while its plate is pressed)   a-d bridge (only while pressed)
 //   K  piano key   $  star   P/Q  where Sugar/Spice start
+//   ~  the Meadow's current (water flowing east: floating crates drift on it)
+//   %  the Workshop's rollers over a chasm (flowing west: planks ride them)   t  a tacked plank
 // Sugar's vines (v) only hold Spice.
 const SOLID = '#Tr';
-const HOLE = 'wo';
+const HOLE = 'wo~%';
 
 export function createWorld(world, opts = {}) {
   const grid = world.map.map((r) => r.split(''));
@@ -42,7 +44,7 @@ export function createWorld(world, opts = {}) {
       id, x: 0, y: 0, vx: 0, vy: 0, fx: id ? -1 : 1, fy: 0, hop: 0, fly: null, size: 'normal',
       dead: false, deadT: 0, safe: null, cool: 0, freezing: false, glide: false, push: 0, pushX: 0, pushY: 0,
     })),
-    vine: null, nails: [], fx: [], frozen: false, starsGot: 0,
+    vine: null, nails: [], planks: [], fx: [], frozen: false, starsGot: 0,
     tick: 0, time: 0, complete: false, events: [],
   };
   s.players.forEach((p) => { p.x = spawns[p.id].x; p.y = spawns[p.id].y; });
@@ -56,7 +58,8 @@ export function createWorld(world, opts = {}) {
 
 function entState(e) {
   switch (e.type) {
-    case 'crate': return { x: e.x, y: e.y };
+    case 'crate': return { x: e.x, y: e.y, hx: e.x, hy: e.y, px: e.x, float: false, tied: false, back: 0 };
+    case 'press': return { cool: 0 };
     case 'switch': return { on: !!e.on };
     case 'race': return { phase: 'idle', count: 0, clock: 0, rest: 0, next: [0, 0], winner: -1 };
     case 'ball': return { vx: 0, vy: 0, hx: e.x, hy: e.y, score: [0, 0], wait: 0, winner: -1, rest: 0, kick: [0, 0] };
@@ -91,7 +94,7 @@ export function solidAt(s, x, y, who = null) {
   if (SOLID.includes(t)) return true;
   if (t >= 'A' && t <= 'D') return !doorOpen(s, x, y);
   if (crateAt(s, x, y)) return true;
-  if (s.ents.some((e) => e.type === 'switch' && e.x === x && e.y === y)) return true;
+  if (s.ents.some((e) => (e.type === 'switch' || e.type === 'press') && e.x === x && e.y === y)) return true;
   void who;
   return false;
 }
@@ -126,6 +129,8 @@ export function step(s, inputs) {
   for (const p of s.players) updatePlayer(s, p, inputs[p.id] || {});
   leash(s);
   updateNails(s);
+  updateRiver(s);
+  updateLine(s);
   for (const p of s.players) touch(s, p);
   updateEnts(s);
   return s;
@@ -162,10 +167,14 @@ function updatePlayer(s, p, inp) {
   }
   // facing follows the stick (8 ways)
   let mx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), my = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
-  if (mx || my) { p.fx = mx; p.fy = my; }
+  if ((mx || my) && !p.casting) { p.fx = mx; p.fy = my; }   // her vine holds her facing too
   p.freezing = power === 'freeze' && !!inp.ability && !p.hop;
   if (p.freezing) { mx = 0; my = 0; }
   if (inp.abilityPressed) useAbility(s, p, power);
+  if (p.casting) {   // her vine: rooted while she holds it; let go and it's gone
+    if (power !== 'vine' || !inp.ability || p.hop) dropVine(s, p);
+    else { mx = 0; my = 0; holdVine(s, p); }
+  }
   // hop: a short airborne moment that clears a one-tile gap (a glide makes it long)
   if (inp.jumpPressed && !p.hop) { p.hop = C.HOP_TIME; p.glide = false; s.events.push({ type: 'jump', who: p.id }); }
   if (p.hop > 0) {
@@ -212,25 +221,30 @@ function useAbility(s, p, power) {
   const o = s.players[1 - p.id];
   const f = front(p);
   switch (power) {
-    case 'vine': {   // a vine over water ahead, up to VINE_LEN tiles; only Spice can walk it
-      if (s.vine) for (const [x, y, was] of s.vine.cells) if (s.grid[y][x] === 'v') s.grid[y][x] = was;
+    case 'vine': {   // a held lasso: a vine over still water ahead (only Spice can walk it) that ties the first floating crate at its end
+      dropVine(s, p);
       const cells = [];
       for (let k = 1; k <= C.VINE_LEN; k++) {
-        const x = Math.floor(p.x) + f.dx * k, y = Math.floor(p.y) + f.dy * k, t = tileAt(s, x, y);
-        if (!HOLE.includes(t)) break;
-        cells.push([x, y, t]); s.grid[y][x] = 'v';
+        const x = Math.floor(p.x) + f.dx * k, y = Math.floor(p.y) + f.dy * k;
+        if (tileAt(s, x, y) !== 'w') break;   // the current tears a vine: it stops at the lane
+        cells.push([x, y, 'w']); s.grid[y][x] = 'v';
       }
-      s.vine = cells.length ? { cells } : null;
-      s.events.push({ type: cells.length ? 'vine' : 'nope', who: p.id, x: p.x, y: p.y });
+      const end = cells.length ? cells[cells.length - 1] : [Math.floor(p.x), Math.floor(p.y)];
+      p.casting = { dx: f.dx, dy: f.dy, tx: end[0] + f.dx, ty: end[1] + f.dy };
+      s.vine = { cells, who: p.id, tx: p.casting.tx, ty: p.casting.ty, tied: -1 };
+      s.events.push({ type: 'vine', who: p.id, x: p.x, y: p.y });
+      holdVine(s, p);
       break;
     }
-    case 'shove': {   // push the crate in front one tile; into water or a pit it sinks and you can walk on it
+    case 'shove': {   // push the crate in front one tile: into still water it sinks and you can walk on it, into the current it floats
       const c = crateAt(s, f.x, f.y);
-      if (!c) { s.events.push({ type: 'nope', who: p.id }); break; }
+      if (!c || (c.float && !c.tied)) { s.events.push({ type: 'nope', who: p.id }); break; }   // a drifting crate slips away
       const bx = f.x + f.dx, by = f.y + f.dy, bt = tileAt(s, bx, by);
       if (SOLID.includes(bt) || crateAt(s, bx, by) || (bt >= 'A' && bt <= 'D' && !doorOpen(s, bx, by)) || s.players.some((q) => !q.dead && overlaps(q, bx, by))) { s.events.push({ type: 'nope', who: p.id }); break; }
-      if (HOLE.includes(bt) || bt === 'v') { c.gone = true; s.grid[by][bx] = 'u'; s.events.push({ type: 'sink', x: bx + 0.5, y: by + 0.5 }); }
-      else { c.x = bx; c.y = by; s.events.push({ type: 'shove', who: p.id, x: bx + 0.5, y: by + 0.5 }); }
+      if (c.tied) untie(s, c);
+      if (bt === '~') { c.x = bx; c.y = by; c.px = bx; c.float = true; s.events.push({ type: 'sink', x: bx + 0.5, y: by + 0.5 }); }
+      else if (HOLE.includes(bt) || bt === 'v') { sinkCrate(c); s.grid[by][bx] = 'u'; s.events.push({ type: 'sink', x: bx + 0.5, y: by + 0.5 }); }
+      else { c.x = bx; c.y = by; c.px = bx; c.float = false; s.events.push({ type: 'shove', who: p.id, x: bx + 0.5, y: by + 0.5 }); }
       break;
     }
     case 'nail': {   // a nail flies ahead and flips the switch it hits
@@ -242,6 +256,21 @@ function useAbility(s, p, power) {
       break;
     }
     case 'hammer': {   // smash a crate or rock ahead; hammer a springboard and whoever stands on it flies
+      const press = s.ents.find((e) => e.type === 'press' && e.x === f.x && e.y === f.y);
+      if (press) {   // the press stamps a plank onto the rollers
+        if (press.cool > 0 || s.planks.some((k) => Math.abs(k.px - press.ox) < 1 && k.y === press.oy && !k.tacked)) { s.events.push({ type: 'nope', who: p.id }); break; }
+        press.cool = C.PRESS_COOL;
+        s.planks.push({ px: press.ox, y: press.oy, tacked: false, t: 0 });
+        s.events.push({ type: 'slam', who: p.id, x: press.x + 0.5, y: press.y + 0.5 });
+        break;
+      }
+      for (const [tx, ty] of [[Math.floor(p.x), Math.floor(p.y)], [f.x, f.y]]) {   // drive a tacked plank home: underfoot or ahead
+        if (tileAt(s, tx, ty) !== 't') continue;
+        s.grid[ty][tx] = '=';
+        s.planks = s.planks.filter((k) => !(k.tacked && k.y === ty && Math.round(k.px) === tx));
+        s.events.push({ type: 'thud', who: p.id, x: tx + 0.5, y: ty + 0.5, drive: true });
+        return;
+      }
       const spring = s.ents.find((e) => e.type === 'spring' && (e.x === f.x && e.y === f.y || e.x === Math.floor(p.x) && e.y === Math.floor(p.y)));
       if (spring) {
         s.events.push({ type: 'thud', who: p.id, x: spring.x + 0.5, y: spring.y + 0.5 });
@@ -266,11 +295,72 @@ function updateNails(s) {
   for (const n of s.nails) {
     const stepLen = C.NAIL_SPEED * C.DT;
     n.x += n.dx * stepLen; n.y += n.dy * stepLen; n.dist += stepLen;
+    // a riding plank: the nail tacks it where it is (only over the rollers does that make a footing)
+    const pk = s.planks.find((k) => !k.tacked && Math.abs(k.px + 0.5 - n.x) < 0.6 && Math.abs(k.y + 0.5 - n.y) < 0.6);
+    if (pk) {
+      const cx = Math.round(pk.px);
+      n.done = true;
+      if (tileAt(s, cx, pk.y) === '%') { pk.px = cx; pk.tacked = true; pk.t = C.TACK_TIME; s.grid[pk.y][cx] = 't'; s.events.push({ type: 'pinned', x: cx + 0.5, y: pk.y + 0.5, tack: true }); }
+      continue;
+    }
     const sw = s.ents.find((e) => e.type === 'switch' && Math.abs(e.x + 0.5 - n.x) < 0.6 && Math.abs(e.y + 0.5 - n.y) < 0.6);
     if (sw) { sw.on = !sw.on; n.done = true; s.events.push({ type: 'pinned', x: sw.x + 0.5, y: sw.y + 0.5, on: sw.on }); continue; }
     if (SOLID.includes(tileAt(s, Math.floor(n.x), Math.floor(n.y))) || n.dist > C.NAIL_RANGE) n.done = true;
   }
   s.nails = s.nails.filter((n) => !n.done);
+}
+
+// ---------------------------------------------------------------- the river and the line
+
+function sinkCrate(c) { c.gone = true; c.float = false; c.tied = false; if (c.dock) c.back = C.CRATE_BACK; }
+function untie(s, c) { c.tied = false; if (s.vine) s.vine.tied = -1; }
+export function dropVine(s, p) {
+  p.casting = null;
+  if (!s.vine || s.vine.who !== p.id) return;
+  for (const [x, y, was] of s.vine.cells) if (s.grid[y][x] === 'v') s.grid[y][x] = was;
+  const c = s.ents[s.vine.tied];
+  if (c && c.tied) c.tied = false;
+  s.vine = null;
+}
+// while she holds: the first floating crate to reach the end of her vine is tied there
+function holdVine(s, p) {
+  const v = s.vine;
+  if (!v || v.tied >= 0) return;
+  const c = s.ents.find((e) => e.type === 'crate' && !e.gone && e.float && e.x === v.tx && e.y === v.ty);
+  if (!c) return;
+  c.tied = true; c.px = c.x; v.tied = c.i;
+  s.events.push({ type: 'tie', who: p.id, x: c.x + 0.5, y: c.y + 0.5 });
+}
+function updateRiver(s) {
+  for (const c of s.ents) {
+    if (c.type !== 'crate') continue;
+    if (c.gone) {   // a dock crate comes back once its home is clear
+      if (!c.dock || (c.back -= C.DT) > 0) continue;
+      if (crateAt(s, c.hx, c.hy) || s.players.some((q) => !q.dead && overlaps(q, c.hx, c.hy))) continue;
+      Object.assign(c, { gone: false, x: c.hx, y: c.hy, px: c.hx, float: false, tied: false });
+      s.events.push({ type: 'shove', x: c.hx + 0.5, y: c.hy + 0.5 });
+      continue;
+    }
+    if (!c.float || c.tied) continue;
+    c.px += C.FLOW * C.DT;
+    if (tileAt(s, Math.floor(c.px + 1 - EPS), c.y) !== '~') { sinkCrate(c); continue; }   // the end of the river: back to the dock
+    c.x = Math.floor(c.px + 0.5);
+  }
+}
+function updateLine(s) {
+  for (const e of s.ents) if (e.type === 'press' && e.cool > 0) e.cool -= C.DT;
+  for (const k of s.planks) {
+    if (k.tacked) {
+      if ((k.t -= C.DT) > 0) continue;
+      k.tacked = false;   // it works loose and rides on
+      if (s.grid[k.y][Math.round(k.px)] === 't') s.grid[k.y][Math.round(k.px)] = '%';
+      s.events.push({ type: 'nope', x: k.px + 0.5, y: k.y + 0.5 });
+      continue;
+    }
+    k.px -= C.ROLL * C.DT;
+    if (!'%t='.includes(tileAt(s, Math.floor(k.px + EPS), k.y))) { k.done = true; s.events.push({ type: 'drop', x: k.px + 0.5, y: k.y + 0.5 }); }   // off the end, into the chasm
+  }
+  s.planks = s.planks.filter((k) => !k.done);
 }
 
 function leash(s) {

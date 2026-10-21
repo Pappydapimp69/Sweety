@@ -18,6 +18,9 @@ import { Ramp } from '../dsp/smoother.js';
  * {type:'size', creature | tract, sac}, {type:'send', value}, {type:'mute'},
  * {type:'dispose'}.
  */
+const SILENT = 1e-7;   // about -140 dB
+const WAKES = new Set(['call', 'step', 'water', 'burst', 'strike', 'unmute']);
+
 class SourceProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
@@ -42,10 +45,17 @@ class SourceProcessor extends AudioWorkletProcessor {
     this.mute = new Ramp(1);
     this.alive = true;
     this.out = [0, 0];
+    // Idle sleep: a source whose generator has been silent long enough for its delay
+    // line and filters to drain writes nothing (outputs arrive zeroed) until an event
+    // wakes it. Sixteen always-on spatializers cost a slow device its frame rate.
+    this.quiet = 0;
+    this.sleepAfter = Math.ceil(this.spatial.maxDelay) + Math.round(0.25 * fs);
+    this.asleep = false;
     this.port.onmessage = (e) => this.onMessage(e.data);
   }
 
   onMessage(m) {
+    if (WAKES.has(m.type)) { this.asleep = false; this.quiet = 0; }
     switch (m.type) {
       case 'spatial': this.spatial.update(m.p); break;
       case 'call': this.mute.setTarget(1, 64); this.gen.call?.(m); break;
@@ -69,16 +79,19 @@ class SourceProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs, outputs) {
+    if (this.asleep) return this.alive;
     const [L, R] = outputs[0];
     const S = outputs[1] && outputs[1][0];
     const n = L.length;
     for (let i = 0; i < n; i++) {
       const x = this.gen.process() * this.mute.next();
+      this.quiet = Math.abs(x) < SILENT ? this.quiet + 1 : 0;
       this.spatial.process(x, this.out);
       L[i] = this.out[0];
       if (R) R[i] = this.out[1];
       if (S) S[i] = this.spatial.send * this.send.next();   // tapped before the distance gain
     }
+    if (this.quiet > this.sleepAfter) this.asleep = true;
     return this.alive;
   }
 }
@@ -101,6 +114,8 @@ class ReverbProcessor extends AudioWorkletProcessor {
     this.fadeLen = Math.round(0.4 * sampleRate);
     this.oa = [0, 0];
     this.ob = [0, 0];
+    this.quiet = 0;
+    this.sleepAfter = Math.round(4 * sampleRate);   // past the longest zone tail (cave T60 2.8 s)
     this.port.onmessage = (e) => {
       const m = e.data;
       const z2 = m.type === 'zone' ? ZONES[m.name] : m.type === 'decay' ? { ...m, size: m.size ?? this.size } : null;
@@ -119,8 +134,16 @@ class ReverbProcessor extends AudioWorkletProcessor {
   process(inputs, outputs) {
     const inp = inputs[0] && inputs[0][0];
     const [L, R] = outputs[0];
+    // asleep while nothing has come in for longer than any tail: wake on the first sound
+    if (this.quiet > this.sleepAfter && !this.b) {
+      let any = false;
+      if (inp) for (let i = 0; i < inp.length && !any; i++) any = Math.abs(inp[i]) >= SILENT;
+      if (!any) return true;
+      this.quiet = 0;
+    }
     for (let i = 0; i < L.length; i++) {
       const x = inp ? inp[i] : 0;
+      this.quiet = Math.abs(x) < SILENT ? this.quiet + 1 : 0;
       this.a.process(this.b ? x * (this.fade < this.fadeLen ? 1 : 0) : x, this.oa);
       if (this.b) {
         this.b.process(x, this.ob);

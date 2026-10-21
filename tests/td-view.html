@@ -57,26 +57,26 @@ const SCENES = {
   },
   meadow: (s) => {
     const [X, Y] = O('meadow');
-    // her vine over the river (set here, not by the sim), his crate on the plate: her bridge is up
-    const cells = [];
-    for (let y = 8; y <= 10; y++) { cells.push([X + 10, Y + y, 'w']); s.grid[Y + y][X + 10] = 'v'; }
-    s.vine = { cells };
-    const c = s.ents.find((e) => e.type === 'crate' && e.x === X + 20); c.y = Y + 14;
-    return [X + 10.5, Y + 7.3, X + 10.5, Y + 9.5];
+    // her vine over the moat (set here, not by the sim) tying a crate in the current; one afloat upstream
+    s.grid[Y + 8][X + 16] = 'v';
+    s.vine = { cells: [[X + 16, Y + 8, 'w']], who: 0, tx: X + 16, ty: Y + 9, tied: -1 };
+    const [a, b] = s.ents.filter((e) => e.type === 'crate' && e.dock);
+    Object.assign(a, { x: X + 16, y: Y + 9, px: X + 16, float: true, tied: true });
+    Object.assign(b, { x: X + 10, y: Y + 9, px: X + 9.6, float: true });
+    s.grid[Y + 10][X + 22] = 'u';
+    return [X + 16.5, Y + 7.5, X + 16.5, Y + 8.5];
   },
-  'meadow-pond': (s) => { const [X, Y] = O('meadow'); return [X + 10.5, Y + 16.5, X + 17.5, Y + 18.5]; },
   'meadow-stone': (s) => { const [X, Y] = O('meadow'); s.ents.find((e) => e.type === 'stone' && e.region === 0).lit = false; return [X + 15.5, Y + 3.6, X + 16.6, Y + 4.4]; },
-  workshop: (s) => { const [X, Y] = O('workshop'); return [X + 18.5, Y + 8.5, X + 24.5, Y + 12.5]; },
-  'workshop-open': (s) => {
+  workshop: (s) => {
     const [X, Y] = O('workshop');
-    s.ents.find((e) => e.type === 'switch' && e.g === 3).on = true;
-    s.grid[Y + 12][X + 21] = '.'; s.grid[Y + 12][X + 22] = '.';
-    return [X + 16.5, Y + 12.5, X + 12.5, Y + 12.2];
+    // a plank tacked over one roller, one driven home, one riding in
+    s.grid[Y + 17][X + 17] = '='; s.grid[Y + 17][X + 15] = 't';
+    s.planks.push({ px: X + 15, y: Y + 17, tacked: true, t: 1 }, { px: X + 17.6, y: Y + 17, tacked: false, t: 0 });
+    return [X + 19.5, Y + 17.5, X + 21.5, Y + 17.5];
   },
-  'workshop-garden': (s) => { const [X, Y] = O('workshop'); return [X + 11.5, Y + 5.5, X + 12.5, Y + 6.5]; },
   'workshop-fly': (s) => {
     const [X, Y] = O('workshop');
-    return [X + 11.5, Y + 5.5, X + 12.5, Y + 5.5, (s) => { s.players[0].fly = { x0: X + 11.5, y0: Y + 5.5, x1: X + 6.5, y1: Y + 6.5, t: 0, dur: 0.8 }; }, 22];
+    return [X + 10.5, Y + 21.5, X + 11.5, Y + 21.5, (s) => { s.players[0].fly = { x0: X + 10.5, y0: Y + 21.5, x1: X + 5.5, y1: Y + 20.5, t: 0, dur: 0.8 }; }, 22];
   },
   border: (s) => { const [X, Y] = O('meadow'); return [X + 16, Y - 1.5, X + 17, Y + 1.5]; },
   papercut: (s) => demo(s, 'night'),

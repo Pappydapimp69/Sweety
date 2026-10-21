@@ -58,58 +58,59 @@ const origin = (r) => [r.col * RW, r.row * RH];
   rect(X + 15, Y + RH, X + 17, Y + RH);
 }
 
-// ---------------------------------------------------------------- the Meadow: Sugar's vines, Spice's shove
+// ---------------------------------------------------------------- the Meadow: the river
+// Its loop is a current. Spice shoves dock crates into it; Sugar holds her vine
+// across the still water and ties the crate that reaches its end; only a tied
+// crate holds still enough for him to shove it on, into the still water, where it
+// sinks into a stepping stone. One stone each side of the current and you both
+// hop it. Her vine needs his floating crates; his shove out there needs her tie.
 {
   const [X, Y] = origin(REGIONS[0]);
   rect(X + 1, Y + 1, X + RW - 2, Y + RH - 2);
   ent({ type: 'stone', region: 0, x: X + 15, y: Y + 3 });
   sign(X + 13, Y + 2, 'A power stone. Stand on it together.');
-  // the river: her vine holds him; his crate holds the plate; the plate brings up her bridge
-  rect(X + 1, Y + 8, X + RW - 2, Y + 10, 'w');
-  put(X + 24, Y + 8, 'a'); put(X + 24, Y + 9, 'a'); put(X + 24, Y + 10, 'a');
-  ent({ type: 'crate', x: X + 20, y: Y + 12 }); put(X + 20, Y + 14, '1');
-  sign(X + 11, Y + 6, 'Sugar: face the water and grow a vine. Only Spice can walk on it.');
-  // the channel: two wide; one crate in it and the rest is a hop
-  rect(X + 26, Y + 11, X + 27, Y + RH - 2, 'w');
-  ent({ type: 'crate', x: X + 24, y: Y + 18 });
-  sign(X + 22, Y + 16, 'Spice: shove a crate into the water and it becomes a stepping stone. Then hop.');
-  ent({ type: 'heart', region: 0, x: X + 30, y: Y + 21 });
-  // stars: an island in the pond (his, by her vine), and her closet (his plate on the island)
-  rect(X + 3, Y + 14, X + 9, Y + 20, 'w'); put(X + 6, Y + 17, '$'); put(X + 6, Y + 18, '2');
-  rect(X + 11, Y + 19, X + 15, Y + 19, '#'); rect(X + 11, Y + 20, X + 11, Y + 24, '#'); rect(X + 15, Y + 20, X + 15, Y + 24, '#');   // down to the region wall: one way in
-  put(X + 13, Y + 19, 'B'); put(X + 13, Y + 22, '$'); put(X + 12, Y + 23, '2');
+  // north to south: the dock and the moat (row 8), the current (row 9), the berth (row 10)
+  rect(X + 10, Y + 8, X + RW - 2, Y + 8, 'w');
+  rect(X + 1, Y + 9, X + RW - 2, Y + 9, '~');
+  rect(X + 1, Y + 10, X + RW - 2, Y + 10, 'w');
+  for (const cx of [3, 6, 8]) ent({ type: 'crate', x: X + cx, y: Y + 8, dock: true });
+  sign(X + 4, Y + 5, 'Spice: shove a crate into the current. It floats away east.');
+  sign(X + 16, Y + 6, 'Sugar: hold your power facing the river. Your vine ties the crate that reaches it. Spice: walk her vine and shove the tied crate into still water.');
+  ent({ type: 'heart', region: 0, x: X + 28, y: Y + 20 });
+  sign(X + 24, Y + 13, 'One stone each side of the current, and you can both hop it.');
   // west to the Workshop: opens with the Meadow's heart
-  gate(0, cellsRect(X - 1, Y + 11, X, Y + 13));
-  rect(X - 1, Y + 11, X, Y + 13);
+  gate(0, cellsRect(X - 1, Y + 16, X, Y + 18));
+  rect(X - 1, Y + 16, X, Y + 18);
 }
 
-// ---------------------------------------------------------------- the Workshop: nails and the hammer
+// ---------------------------------------------------------------- the Workshop: the line
+// Its loop is an assembly line racing a clock. Spice hammers the press and it
+// stamps a plank onto rollers running west over the chasm; Sugar's nail tacks a
+// passing plank where it is (only over the rollers does it make a footing), and it
+// holds for a few seconds; Spice hops on and hammers it home for good. Two planks
+// at alternate rollers and you can both hop over. Her nails only take in his
+// planks; his hammer only drives what she tacked.
 {
   const [X, Y] = origin(REGIONS[1]);
   rect(X + 1, Y + 1, X + RW - 2, Y + RH - 2);
-  ent({ type: 'stone', region: 1, x: X + 28, y: Y + 11 });
-  // rocks across the way: the hammer
-  rect(X + 21, Y + 1, X + 22, Y + RH - 2, '#'); put(X + 21, Y + 11, 'rr'); put(X + 21, Y + 12, 'rr'); put(X + 21, Y + 13, 'rr');
-  sign(X + 24, Y + 9, 'Spice: hammer the rocks.');
-  // a door with its switch up on the far wall: the nail gun
-  rect(X + 14, Y + 1, X + 14, Y + RH - 2, '#'); put(X + 14, Y + 11, 'C'); put(X + 14, Y + 12, 'C'); put(X + 14, Y + 13, 'C');
-  ent({ type: 'switch', g: 3, x: X + 18, y: Y + 4 });
-  sign(X + 17, Y + 15, 'Sugar: face the switch and fire a nail. It flips the door.');
-  // the heart's garden: walled, its door's plate inside; a springboard flings Sugar in
-  rect(X + 2, Y + 2, X + 9, Y + 2, '#'); rect(X + 2, Y + 9, X + 9, Y + 9, '#'); rect(X + 2, Y + 3, X + 2, Y + 8, '#'); rect(X + 9, Y + 3, X + 9, Y + 8, '#');
-  put(X + 5, Y + 9, 'A'); put(X + 4, Y + 6, '1');
-  ent({ type: 'heart', region: 1, x: X + 6, y: Y + 4 });
-  ent({ type: 'spring', x: X + 11, y: Y + 5, tx: X + 6, ty: Y + 6 });
-  sign(X + 12, Y + 8, 'Sugar on the springboard, Spice hammers it.');
-  // stars: a switch-door pocket with rocks inside; a nook only a springboard reaches
-  rect(X + 24, Y + 18, X + 31, Y + 18, '#'); rect(X + 24, Y + 19, X + 24, Y + 24, '#'); rect(X + 31, Y + 19, X + 31, Y + 24, '#');   // down to the region wall: one way in
-  put(X + 24, Y + 21, 'D'); ent({ type: 'switch', g: 4, x: X + 27, y: Y + 15 });
-  rect(X + 27, Y + 19, X + 27, Y + 24, 'r'); put(X + 29, Y + 21, '$');
-  rect(X + 2, Y + 16, X + 8, Y + 16, '#'); rect(X + 2, Y + 17, X + 2, Y + 21, '#'); rect(X + 8, Y + 17, X + 8, Y + 21, '#'); rect(X + 2, Y + 22, X + 8, Y + 22, '#');
-  put(X + 5, Y + 22, 'B'); put(X + 5, Y + 21, '2'); put(X + 6, Y + 18, '$');   // the plate by the door: step off it into the doorway and it holds
-  ent({ type: 'spring', x: X + 5, y: Y + 24, tx: X + 5, ty: Y + 19 });
+  ent({ type: 'stone', region: 1, x: X + 26, y: Y + 15 });
+  // the chasm, five wide from top to bottom; the rollers cross it on row 17
+  rect(X + 14, Y + 1, X + 18, Y + RH - 2, 'o');
+  rect(X + 14, Y + 17, X + 18, Y + 17, '%');
+  ent({ type: 'press', x: X + 20, y: Y + 17, ox: X + 18, oy: Y + 17 });
+  put(X + 20, Y + 16, '#'); put(X + 20, Y + 18, '#');   // the press's housing: you reach it from the east
+  sign(X + 22, Y + 14, 'Spice: hammer the press. A plank rides the rollers over the chasm.');
+  sign(X + 19, Y + 20, 'Sugar: shoot a nail along the rollers to tack a plank where it is. Spice: hop on and hammer it home before it works loose.');
+  ent({ type: 'heart', region: 1, x: X + 5, y: Y + 12 });
+  // a star: a walled nook on the far side that only a springboard reaches (she rides, he hammers);
+  // out again by the plate inside: step off it into the doorway and the door holds
+  rect(X + 2, Y + 18, X + 8, Y + 18, '#'); rect(X + 2, Y + 19, X + 2, Y + 23, '#'); rect(X + 8, Y + 19, X + 8, Y + 23, '#'); rect(X + 2, Y + 24, X + 8, Y + 24, '#');
+  put(X + 5, Y + 21, '$');
+  ent({ type: 'spring', x: X + 10, y: Y + 21, tx: X + 5, ty: Y + 20 });
+  put(X + 8, Y + 21, 'B'); put(X + 7, Y + 21, '2');
+  sign(X + 11, Y + 23, 'Sugar on the springboard, Spice hammers it.');
   // north: the Night Wood, not built yet
-  sign(X + 16, Y + 2, 'The Night Wood is north. It isn\'t finished yet.');
+  sign(X + 6, Y + 2, 'The Night Wood is north. It isn\'t finished yet.');
 }
 
 // the regions still to come: closed off, with a sign at their gate

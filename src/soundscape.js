@@ -115,6 +115,7 @@ const HITS = {
   glass: (e) => { strike('glass', e, 0.5, 0.75); return true; },
   strike: (e) => { strike('stone', e, 0.8, 0.4); if (e.bell) setTimeout(() => eng && strike('bell', e, 0.7, 0.55), 150); return true; },
   flood: (e) => { splash(e, 400, 1.5); return false; },
+  drop: (e) => { strike('wood', e, 0.45, 0.3); return false; },
   sink: (e) => { splash(e, 150, 1.1); return false; },
   shove: (e) => { strike('wood', e, 0.35, 0.4); return false; },
   boom: (e) => { strike('stone', e, 1, 0.15); return false; },

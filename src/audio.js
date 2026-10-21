@@ -108,6 +108,8 @@ const SFX = {
   enter: () => [392, 523, 659].forEach((f, i) => tone(f, 0.18, { type: 'triangle', vol: 0.08, delay: i * 0.07 })),
   locked: () => tone(140, 0.15, { type: 'square', vol: 0.06 }),
   // the island
+  tie: () => [523, 659].forEach((f, i) => tone(f, 0.1, { type: 'triangle', vol: 0.07, delay: i * 0.06 })),
+  drop: () => tone(220, 0.35, { type: 'triangle', vol: 0.06, slide: -160 }),
   vine: () => [330, 392, 494].forEach((f, i) => tone(f, 0.12, { type: 'triangle', vol: 0.06, delay: i * 0.05 })),
   shove: () => tone(90, 0.12, { type: 'sawtooth', vol: 0.05 }),
   sink: () => tone(260, 0.3, { vol: 0.08, slide: -180 }),

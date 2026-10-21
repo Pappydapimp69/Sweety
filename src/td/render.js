@@ -162,7 +162,8 @@ function specks(c, X, Y, R, seed, n, color, size) {
 function baseChar(ch, x, y, vineWas) {
   if (ch === undefined) return '#';
   if ((ch >= '1' && ch <= '8') || (ch >= 'A' && ch <= 'D') || ch === 'K' || ch === '$' || ch === 'P' || ch === 'Q' || ch === 'H') return '.';
-  if (ch >= 'a' && ch <= 'd') return 'w';
+  if (ch >= 'a' && ch <= 'd' || ch === '~') return 'w';
+  if (ch === '%' || ch === 't') return 'o';   // rollers and tacked planks are live, over the chasm
   if (ch === 'v') return (vineWas && vineWas.get(y * 100000 + x)) || 'w';
   return ch;
 }
@@ -1174,6 +1175,42 @@ function drawVine(ctx, rd, x, y, X, Y, k, t) {
 
 // ---------------------------------------------------------------- entities
 
+// the Meadow's current: streaks sliding east
+function drawCurrent(ctx, x, X, Y, k, t) {
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = Math.max(1.2, k * 0.04); ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < 2; i++) {
+    const u = ((t * C.FLOW + x + i * 0.5) % 1 + 1) % 1, yy = Y + k * (0.3 + i * 0.4);
+    ctx.moveTo(X + u * k, yy); ctx.lineTo(X + Math.min(k, u * k + k * 0.35), yy);
+  }
+  ctx.stroke(); ctx.lineCap = 'butt';
+}
+// the Workshop's rollers over the chasm, turning west
+function drawRollers(ctx, X, Y, k, t) {
+  ctx.fillStyle = '#343a40'; ctx.fillRect(X, Y + k * 0.12, k, k * 0.76);
+  const phase = ((t * C.ROLL) % 1 + 1) % 1;
+  for (let i = 0; i < 3; i++) {
+    const cx = X + k * (i + 0.5) / 3;
+    ctx.fillStyle = '#adb5bd'; rrect(ctx, cx - k * 0.13, Y + k * 0.16, k * 0.26, k * 0.68, k * 0.12); ctx.fill();
+    ctx.fillStyle = 'rgba(33,37,41,0.55)'; ctx.fillRect(cx - k * 0.13, Y + k * (0.16 + 0.68 * ((phase + i / 3) % 1)) - k * 0.03, k * 0.26, k * 0.06);
+  }
+  ctx.fillStyle = '#868e96'; ctx.fillRect(X, Y + k * 0.1, k, k * 0.05); ctx.fillRect(X, Y + k * 0.85, k, k * 0.05);
+}
+// a plank: riding (left null) or tacked (with what's left of its hold, wobbling near the end)
+function drawPlank(ctx, X, Y, k, t, left) {
+  const shake = left !== null && left < 1.2 ? Math.sin(t * 40) * k * 0.03 : 0;
+  softShadow(ctx, X + k / 2, Y + k * 0.85, k * 0.55, k * 0.14, 0.45);
+  ctx.fillStyle = '#e8b673'; rrect(ctx, X - k * 0.04 + shake, Y + k * 0.18, k * 1.08, k * 0.64, k * 0.08); ctx.fill();
+  ctx.strokeStyle = '#7f4f24'; ctx.lineWidth = Math.max(1.5, k * 0.05); ctx.stroke();
+  ctx.strokeStyle = 'rgba(127,79,36,0.5)'; ctx.lineWidth = Math.max(1, k * 0.025);
+  ctx.beginPath(); ctx.moveTo(X + k * 0.1 + shake, Y + k * 0.4); ctx.lineTo(X + k * 0.9 + shake, Y + k * 0.42); ctx.moveTo(X + k * 0.1 + shake, Y + k * 0.62); ctx.lineTo(X + k * 0.8 + shake, Y + k * 0.6); ctx.stroke();
+  if (left === null) return;
+  ctx.fillStyle = '#495057';
+  for (const [u, v] of [[0.15, 0.3], [0.85, 0.3], [0.15, 0.7], [0.85, 0.7]]) { ctx.beginPath(); ctx.arc(X + u * k + shake, Y + v * k, k * 0.05, 0, TAU); ctx.fill(); }
+  ctx.strokeStyle = left < 1.2 ? '#ff6b6b' : '#ffffff'; ctx.lineWidth = Math.max(2, k * 0.07); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(X + k / 2, Y - k * 0.2, k * 0.2, -Math.PI / 2, -Math.PI / 2 + TAU * clamp01(left / C.TACK_TIME)); ctx.stroke(); ctx.lineCap = 'butt';
+}
+
 function sortY(e) {
   switch (e.type) {
     case 'stone': return e.y + 2;
@@ -1275,7 +1312,32 @@ function flag(ctx, x, y, k, t, color, text, big = false) {
 
 function drawEnt(ctx, s, st, e, sx, sy, k, t, H) {
   switch (e.type) {
-    case 'crate': if (!e.gone) st.crate(ctx, sx(e.x), sy(e.y), k); break;
+    case 'crate': {
+      if (e.gone) break;
+      if (!e.float) { st.crate(ctx, sx(e.x), sy(e.y), k); break; }
+      // afloat: bobbing on the current, sitting low; tied, a knot of vine holds it
+      const bob = e.tied ? 0 : Math.sin(t * 4 + e.px * 2) * k * 0.05;
+      ctx.save(); ctx.globalAlpha = 0.95;
+      st.crate(ctx, sx(e.px), sy(e.y) + k * 0.18 + bob, k);
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = Math.max(1.5, k * 0.05);
+      ctx.beginPath(); ctx.ellipse(sx(e.px) + k / 2, sy(e.y) + k * 0.85, k * 0.5, k * 0.12, 0, 0, TAU); ctx.stroke();
+      if (e.tied) {
+        ctx.strokeStyle = '#2b8a3e'; ctx.lineWidth = Math.max(3, k * 0.12); ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(sx(e.px) + k / 2, sy(e.y) + k * 0.45, k * 0.34, 0, TAU); ctx.stroke(); ctx.lineCap = 'butt';
+        glow(ctx, sx(e.px) + k / 2, sy(e.y) + k / 2, k * 0.9, '#69db7c', 0.35);
+      }
+      break;
+    }
+    case 'press': {   // a stamping press: the ram drops when he hammers it
+      const X = sx(e.x), Y = sy(e.y), down = clamp01(e.cool / C.PRESS_COOL);
+      softShadow(ctx, X + k / 2, Y + k * 0.95, k * 0.5, k * 0.18, 0.5);
+      ctx.fillStyle = '#495057'; rrect(ctx, X + k * 0.06, Y - k * 0.5, k * 0.88, k * 1.4, k * 0.1); ctx.fill();
+      ctx.strokeStyle = '#212529'; ctx.lineWidth = Math.max(1.5, k * 0.05); ctx.stroke();
+      ctx.fillStyle = '#ff922b'; rrect(ctx, X + k * 0.18, Y - k * 0.35 + down * k * 0.45, k * 0.64, k * 0.3, k * 0.06); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffd43b'; ctx.beginPath(); ctx.moveTo(X + k * 0.05, Y + k * 0.5); ctx.lineTo(X - k * 0.2, Y + k * 0.35); ctx.lineTo(X - k * 0.2, Y + k * 0.65); ctx.closePath(); ctx.fill();   // out this way
+      break;
+    }
     case 'switch': {
       const X = sx(e.x), Y = sy(e.y), cx = X + k / 2, col = GROUP_COLORS[e.g];
       softShadow(ctx, cx + k * 0.08, Y + k * 0.85, k * 0.4, k * 0.13, 0.8);
@@ -1488,7 +1550,7 @@ export function drawTD(ctx, s, cam, W, H, fx = [], t = s.time) {
       if (ch === '#' || ch === '.') continue;
       const X = sx(x), Y = sy(y);
       const st = styleOf(zoneOf(s, x, y));
-      if (ch === 'w' || ch === 'u' || (ch >= 'a' && ch <= 'd' && !s.pressed[ch.charCodeAt(0) - 96])) {
+      if (ch === 'w' || ch === 'u' || ch === '~' || (ch >= 'a' && ch <= 'd' && !s.pressed[ch.charCodeAt(0) - 96])) {
         let path = ripples.get(st);
         if (!path) { path = []; ripples.set(st, path); }
         path.push([x, y, X, Y]);
@@ -1510,6 +1572,9 @@ export function drawTD(ctx, s, cam, W, H, fx = [], t = s.time) {
         glow(ctx, X + k / 2, Y + k / 2 + bob, k * 0.9, '#ffd43b', 0.6);
         drawStar(ctx, X + k / 2, Y + k / 2 + bob, k * 0.32);
       } else if (ch === 'v') drawVine(ctx, raw, x, y, X, Y, k, t);
+      else if (ch === '~') drawCurrent(ctx, x, X, Y, k, t);
+      else if (ch === '%') drawRollers(ctx, X, Y, k, t);
+      else if (ch === 't') { const pk = (s.planks || []).find((q) => q.tacked && q.y === y && Math.round(q.px) === x); drawPlank(ctx, X, Y, k, t, pk ? pk.t : C.TACK_TIME); }
     }
   }
   for (const [st, list] of ripples) {
@@ -1531,6 +1596,9 @@ export function drawTD(ctx, s, cam, W, H, fx = [], t = s.time) {
     if (kind) drawPlayer(ctx, s, st, o, sx, sy, k, t);
     else drawEnt(ctx, s, st, o, sx, sy, k, t, H);
   }
+
+  // planks riding the rollers (the tacked ones are drawn with their tiles)
+  for (const pk of s.planks || []) if (!pk.tacked) drawPlank(ctx, sx(pk.px), sy(pk.y), k, t, null);
 
   // nails
   for (const n of s.nails || []) {
