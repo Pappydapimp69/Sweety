@@ -22,13 +22,13 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let browser;
 try {
   for (let i = 0; i < 50; i++) { try { const r = await fetch(`http://127.0.0.1:${PORT}/tests/td-view.html`); if (r.ok) break; } catch { /* not up yet */ } await wait(100); }
-  browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium/chrome-linux/chrome', args: ['--headless=new', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] }).catch(() =>
+  browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--headless=new', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] }).catch(() =>
     chromium.launch({ args: ['--headless=new', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] }));
   const errors = [];
   for (const [vw, vh, tag] of [[1280, 720, 'land'], [390, 844, 'port']]) {
     const page = await browser.newPage({ viewport: { width: vw, height: vh } });
     page.on('pageerror', (e) => errors.push(String(e)));
-    page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
     await page.goto(`http://127.0.0.1:${PORT}/tests/td-view.html#plaza`);
     await page.waitForFunction(() => window.__td && window.__td.ready);
     const scenes = only.length ? only : await page.evaluate(() => window.__td.scenes);
@@ -38,7 +38,7 @@ try {
       await page.waitForFunction(() => window.__td.ready);
       await page.evaluate(() => window.__td.draw(window.__td.s.time + 0.5));
       await page.screenshot({ path: join(out, `${sc}-${tag}.png`) });
-      if (tag === 'land') console.log(`${sc}: ${(await page.evaluate(() => window.__td.bench(90))).toFixed(2)} ms/frame`);
+      if (tag === 'land') { const b = await page.evaluate(() => window.__td.bench(30)); console.log(`${sc}: drawTD ${b.cpu.toFixed(2)} ms, frame ${b.frame.toFixed(1)} ms`); }
     }
     await page.close();
   }

@@ -105,12 +105,21 @@ function scene(name) {
   draw(s.time);
 }
 function draw(t) { drawTD(ctx, s, cam, innerWidth, innerHeight, [], t); }
-// time n frames of drawing (the chunks are warm after the first)
-function bench(n = 120) {
+// time n animation frames, a draw in each, as the game would run: { cpu: ms in drawTD per
+// frame, frame: ms between frames }. (A tight loop of draws with one readback at the end
+// measures the GPU queue, not the renderer; a readback per draw flips Chrome's canvas to software.)
+function bench(n = 90) {
   draw(s.time);
-  const t0 = performance.now();
-  for (let i = 0; i < n; i++) draw(s.time + i / 60);
-  return (performance.now() - t0) / n;
+  return new Promise((done) => {
+    let i = 0, cpu = 0, t0 = 0;
+    const tick = (now) => {
+      if (i === 0) t0 = now;
+      const a = performance.now(); draw(s.time + i / 60); cpu += performance.now() - a;
+      if (++i < n) requestAnimationFrame(tick);
+      else done({ cpu: cpu / n, frame: (now - t0) / (n - 1) });
+    };
+    requestAnimationFrame(tick);
+  });
 }
 window.__td = { scene, draw, bench, get s() { return s; }, scenes: Object.keys(SCENES), ready: false };
 const go = () => { window.__td.ready = false; scene(location.hash.slice(1) || 'plaza'); window.__td.ready = true; };

@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRun, NO_INPUT } from '../src/sim.js';
 import { step } from '../src/td/sim.js';
-import { drawTD, makeTDCamera, snapTDCamera, STYLES } from '../src/td/render.js';
+import { drawTD, makeTDCamera, snapTDCamera, STYLES, VIEW_TILES } from '../src/td/render.js';
 import { mainPhases } from './tdphases.mjs';
 
 // a 2D context that accepts every call and every property, and counts the calls
@@ -116,7 +116,7 @@ test('the camera frames both players, fits the short side, and stays on the map'
     // close together: zoomed in, scale from the short side
     s.players[1].x = 41; s.players[1].y = 40;
     snapTDCamera(cam, s, W, H, true);
-    assert.ok(Math.abs(cam.scale - Math.min(W, H) / 12) < 1e-9, `scale ${cam.scale} at ${W}x${H}`);
+    assert.ok(Math.abs(cam.scale - Math.min(W, H) / VIEW_TILES) < 1e-9, `scale ${cam.scale} at ${W}x${H}`);
     // in a corner: the view stays on the map
     s.players[0].x = 1.5; s.players[0].y = 1.5; s.players[1].x = 2.5; s.players[1].y = 1.5;
     snapTDCamera(cam, s, W, H, true);

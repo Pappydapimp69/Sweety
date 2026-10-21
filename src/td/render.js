@@ -13,7 +13,8 @@ import * as C from './config.js';
 import { tileAt, zoneOf, powerOf } from './sim.js';
 import { drawCharacter, heart, PLAYER_COLORS, GROUP_COLORS, textPx, drawStar } from '../render.js';
 
-const LIFT = 0.28;            // how much of a raised tile's height shows as its front face (tiles)
+export const VIEW_TILES = 13;   // tiles across the screen's short side when the two of you are close
+const LIFT = 0.36;            // how much of a raised tile's height shows as its front face (tiles)
 const CHUNK = 8;              // tiles per chunk side
 const RES = [16, 24, 32, 40, 48, 56, 64, 80];
 const SOFT = { willReadFrequently: true };
@@ -241,31 +242,32 @@ function sprinkle(c, x, y, R, seed, alpha = 0.85) {
 }
 const candy = {
   bg: '#ffd1e3', ink: '#7a2e4f', shadow: '#b0507a', vignette: '#ff9cc4',
-  floor(c, q, x, y, X, Y, R) {
-    c.fillStyle = '#f8d3df'; c.fillRect(X, Y, R, R);                  // the icing between tiles
-    const tones = ['#fff1f5', '#fff6e6', '#fdf0ff'];
-    c.fillStyle = tones[(x + y * 2) % 3];
-    rrect(c, X + R * 0.04, Y + R * 0.04, R * 0.92, R * 0.92, R * 0.16); c.fill();
-    c.fillStyle = 'rgba(255,255,255,0.55)';
-    rrect(c, X + R * 0.12, Y + R * 0.09, R * 0.5, R * 0.1, R * 0.05); c.fill();
-    const n = 1 + Math.floor(hash(x, y, 1) * 3);
-    for (let i = 0; i < n; i++) sprinkle(c, X + R * (0.2 + hash(x, y, 10 + i) * 0.6), Y + R * (0.25 + hash(x, y, 20 + i) * 0.6), R, x * 31 + y * 17 + i, 0.55);
+  floor(c, q, x, y, X, Y, R) {   // biscuit tiles set in icing, a few sprinkles
+    // soft strawberry frosting, a faint checker of sugar-paper squares, a swirl now and then
+    c.fillStyle = '#ffe4ee'; c.fillRect(X, Y, R, R);
+    if ((x + y) % 2 === 0) { c.fillStyle = '#fff1f6'; rrect(c, X + R * 0.06, Y + R * 0.06, R * 0.88, R * 0.88, R * 0.3); c.fill(); }
+    if (hash(x, y, 7) < 0.12) {
+      c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = Math.max(1, R * 0.04); c.lineCap = 'round';
+      c.beginPath(); const cx = X + R * 0.5, cy = Y + R * 0.5;
+      for (let a = 0; a < 3.2 * Math.PI; a += 0.35) { const rr = R * 0.04 + a * R * 0.025; c.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
+      c.stroke(); c.lineCap = 'butt';
+    }
+    const n = Math.floor(hash(x, y, 1) * 3);
+    for (let i = 0; i < n; i++) sprinkle(c, X + R * (0.2 + hash(x, y, 10 + i) * 0.6), Y + R * (0.25 + hash(x, y, 20 + i) * 0.6), R, x * 31 + y * 17 + i, 0.5);
   },
   water(c, q, x, y, X, Y, R) {
-    const g = c.createLinearGradient(0, Y, 0, Y + R);
-    g.addColorStop(0, '#6fd3ff'); g.addColorStop(1, '#3fb4ef');
-    c.fillStyle = g; c.fillRect(X, Y, R, R);
-    // soda swirls
+    c.fillStyle = '#56c6f7'; c.fillRect(X, Y, R, R);
     c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = Math.max(1, R * 0.05); c.lineCap = 'round';
     c.beginPath(); c.arc(X + R * (0.3 + hash(x, y, 2) * 0.4), Y + R * (0.3 + hash(x, y, 3) * 0.4), R * 0.18, 0.2, 2.6); c.stroke();
     c.fillStyle = 'rgba(255,255,255,0.6)';
     for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(X + hash(x, y, 30 + i) * R, Y + hash(x, y, 40 + i) * R, R * 0.035, 0, TAU); c.fill(); }
     c.lineCap = 'butt';
-    // a deep blue sugar-glass rim where it meets land
-    c.strokeStyle = '#1c7ed6'; c.lineWidth = Math.max(2, R * 0.09);
+  },
+  water2(c, q, x, y, X, Y, R) {   // a deep blue sugar-glass rim where it meets land
+    c.strokeStyle = '#1c7ed6'; c.lineWidth = Math.max(2, R * 0.1);
     holeEdges(c, q, X, Y, R, isWater);
-    c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = Math.max(1, R * 0.03);
-    c.save(); c.translate(0, R * 0.07); holeEdges(c, q, X, Y, R, isWater); c.restore();
+    c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = Math.max(1, R * 0.035);
+    c.save(); c.translate(R * 0.04, R * 0.08); holeEdges(c, q, X, Y, R, isWater); c.restore();
   },
   pit(c, q, x, y, X, Y, R) {
     c.fillStyle = '#2a120c'; c.fillRect(X, Y, R, R);
@@ -282,35 +284,47 @@ const candy = {
     c.strokeStyle = '#140805'; c.lineWidth = Math.max(2, R * 0.06);
     holeEdges(c, q, X, Y, R, (ch) => ch === 'o');
   },
-  wall(c, q, x, y, X, Y, R) {
+  wall(c, q, x, y, X, Y, R) {   // a slab of layer cake: piped frosting on top, sponge and jam in front
     const p = wallParts(q, X, Y, R);
-    // the front: sponge layers with jam between them
+    const icing = '#ff86b2', icingHi = '#ffc4da';
     if (!p.so) {
       const h = p.bot - p.mid;
-      c.fillStyle = '#eab27c'; c.fillRect(X, p.mid, R, h);
-      c.fillStyle = '#fff0dc'; c.fillRect(X, p.mid + h * 0.38, R, h * 0.12);
-      c.fillStyle = '#ef5b8c'; c.fillRect(X, p.mid + h * 0.5, R, h * 0.16);
-      c.fillStyle = 'rgba(120,60,30,0.35)'; c.fillRect(X, p.bot - h * 0.14, R, h * 0.14);
-      specks(c, X, p.mid, R, x * 5 + y, 3, 'rgba(160,90,40,0.35)', R * 0.03);
+      c.fillStyle = '#f3c788'; c.fillRect(X, p.mid, R, h);                          // sponge
+      c.fillStyle = '#e8467c'; c.fillRect(X, p.mid + h * 0.42, R, h * 0.16);         // jam
+      c.fillStyle = '#fff2dc'; c.fillRect(X, p.mid + h * 0.36, R, h * 0.06);         // cream
+      c.fillStyle = '#7b4a2e'; c.fillRect(X, p.bot - h * 0.2, R, h * 0.2);           // a chocolate base
+      specks(c, X, p.mid + h * 0.6, R, x * 5 + y, 3, 'rgba(150,90,40,0.4)', R * 0.03);
     }
-    // the top: frosting
-    c.fillStyle = (Math.floor(x / 3) + y) % 5 === 0 ? '#ffe8a8' : '#ffc0d6';
-    c.fillRect(X, p.top, R, p.mid - p.top);
-    c.fillStyle = 'rgba(255,255,255,0.45)';
-    if (!p.n) rrect(c, X + R * 0.05, p.top + R * 0.06, R * 0.9, R * 0.1, R * 0.05), c.fill();
+    c.fillStyle = icing; c.fillRect(X, p.top, R, p.mid - p.top);
+    {   // a paler middle, inset only from the exposed sides, so a long wall reads as one slab
+      const hx0 = X + (p.w ? 0 : R * 0.1), hx1 = X + R - (p.e ? 0 : R * 0.1), hy0 = p.top + (p.n ? 0 : R * 0.16), hy1 = p.mid - (p.so ? 0 : R * 0.1);
+      c.fillStyle = icingHi; c.fillRect(hx0, hy0, hx1 - hx0, hy1 - hy0);
+    }
     if (!p.so) {   // drips over the front
-      c.fillStyle = (Math.floor(x / 3) + y) % 5 === 0 ? '#ffe8a8' : '#ffc0d6';
+      c.fillStyle = icing;
       for (let i = 0; i < 3; i++) {
-        const dx = X + R * (0.1 + i * 0.32 + hash(x, y, 50 + i) * 0.12), l = R * LIFT * (0.25 + hash(x, y, 60 + i) * 0.6);
-        rrect(c, dx, p.mid - R * 0.04, R * 0.16, l + R * 0.04, R * 0.08); c.fill();
+        const dx = X + R * (0.06 + i * 0.32 + hash(x, y, 50 + i) * 0.12), l = R * LIFT * (0.2 + hash(x, y, 60 + i) * 0.45);
+        rrect(c, dx, p.mid - R * 0.05, R * 0.17, l + R * 0.05, R * 0.085); c.fill();
       }
     }
-    for (let i = 0; i < 3; i++) sprinkle(c, X + R * (0.15 + hash(x, y, 70 + i) * 0.7), p.top + R * (0.2 + hash(x, y, 80 + i) * 0.6), R, x * 13 + y * 7 + i);
-    if (!p.n && !p.so && hash(x, y, 90) < 0.25) {   // a cherry on the thin walls
-      c.fillStyle = '#e03131'; c.beginPath(); c.arc(X + R * 0.5, p.top + R * 0.4, R * 0.13, 0, TAU); c.fill();
-      c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.arc(X + R * 0.46, p.top + R * 0.36, R * 0.04, 0, TAU); c.fill();
+    if (!p.n) {   // piping along the back edge
+      c.fillStyle = '#ffffff';
+      for (let i = 0; i < 4; i++) { c.beginPath(); c.arc(X + R * (0.125 + i * 0.25), p.top + R * 0.06, R * 0.07, 0, TAU); c.fill(); }
     }
-    c.strokeStyle = '#c2577f'; c.lineWidth = Math.max(1.5, R * 0.05); c.lineJoin = 'round';
+    for (let i = 0; i < 3; i++) sprinkle(c, X + R * (0.18 + hash(x, y, 70 + i) * 0.64), p.top + R * (0.25 + hash(x, y, 80 + i) * 0.5), R, x * 13 + y * 7 + i);
+    const h2 = hash(x, y, 90);
+    if (h2 < 0.12) {   // a cherry
+      c.fillStyle = '#e03131'; c.beginPath(); c.arc(X + R * 0.5, p.top + R * 0.42, R * 0.14, 0, TAU); c.fill();
+      c.strokeStyle = '#7a1d1d'; c.lineWidth = Math.max(1, R * 0.03); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.75)'; c.beginPath(); c.arc(X + R * 0.45, p.top + R * 0.37, R * 0.04, 0, TAU); c.fill();
+    } else if (h2 < 0.2) {   // a gumdrop
+      const col = ['#69db7c', '#ffd43b', '#9775fa', '#ff922b'][Math.floor(hash(x, y, 91) * 4)];
+      c.fillStyle = col; c.beginPath(); c.ellipse(X + R * 0.5, p.top + R * 0.55, R * 0.18, R * 0.09, 0, 0, TAU); c.fill();
+      c.beginPath(); c.arc(X + R * 0.5, p.top + R * 0.52, R * 0.18, Math.PI, 0); c.fill();
+      c.strokeStyle = 'rgba(80,30,50,0.6)'; c.lineWidth = Math.max(1, R * 0.03); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.7)'; c.fillRect(X + R * 0.42, p.top + R * 0.4, R * 0.04, R * 0.04);
+    }
+    c.strokeStyle = '#a63d68'; c.lineWidth = Math.max(1.5, R * 0.05); c.lineJoin = 'round';
     wallEdges(c, p, X, R);
   },
   tree(c, q, x, y, X, Y, R) {
@@ -376,7 +390,7 @@ const candy = {
     ctx.beginPath(); ctx.ellipse(X + k * 0.38, Y - LIFT * k + k * 0.36, k * 0.12, k * 0.07, -0.5, 0, TAU); ctx.ellipse(X + k * 0.62, Y - LIFT * k + k * 0.36, k * 0.12, k * 0.07, 0.5, 0, TAU); ctx.stroke();
   },
   overlay(ctx, W, H, t, a) {
-    vignette(ctx, W, H, '#ff8fbd', 0.28 * a);
+    vignette(ctx, W, H, '#ff8fbd', 0.2 * a);
     // a few sugar sparkles drifting
     ctx.fillStyle = `rgba(255,255,255,${0.7 * a})`;
     for (let i = 0; i < 14; i++) {
@@ -397,45 +411,45 @@ function paper(c, x, y, X, Y, R) {
   specks(c, X, Y, R, x * 9 + y * 151, 4, 'rgba(255,255,255,0.5)', Math.max(1, R * 0.03));
 }
 // a wash: a soft blob, its pigment pooling darker at the rim (watercolour's edge darkening)
-function wash(c, cx, cy, rx, ry, color, alpha, seed) {
+function wash(c, cx, cy, rx, ry, color, alpha, seed, edge = 0.9) {
   blob(c, cx, cy, rx, ry, seed);
   c.fillStyle = rgba(color, alpha); c.fill();
-  c.strokeStyle = rgba(shade2(color), alpha * 0.9); c.lineWidth = Math.max(1, rx * 0.06); c.stroke();
+  c.strokeStyle = rgba(shade2(color), alpha * edge); c.lineWidth = Math.max(1, rx * 0.06); c.stroke();
 }
 const shade2 = (hex) => mixHex(hex, '#203020', 0.35);
 const watercolour = {
   bg: '#efe6d2', ink: INK, shadow: '#5b5470', vignette: '#e8dcc0',
-  floor(c, q, x, y, X, Y, R) {
-    paper(c, x, y, X, Y, R);
-    const greens = ['#9cc97f', '#b5d68a', '#86bb7a', '#a9cf95'];
-    for (let i = 0; i < 2; i++) {
-      const col = greens[Math.floor(hash(x, y, 30 + i) * greens.length)];
-      wash(c, X + R * (0.3 + hash(x, y, i) * 0.4), Y + R * (0.3 + hash(x, y, 5 + i) * 0.4), R * 0.62, R * 0.55, col, 0.32, x * 97 + y * 13 + i);
-    }
+  floor(c, q, x, y, X, Y, R) { paper(c, x, y, X, Y, R); },
+  floor2(c, q, x, y, X, Y, R) {   // overlapping washes, bleeding over each other's edges
+    const greens = ['#9cc97f', '#b5d68a', '#86bb7a', '#a9cf95', '#c4d98a'];
+    const col = greens[Math.floor(hash(x >> 1, y >> 1, 30) * greens.length)];
+    wash(c, X + R * (0.2 + hash(x, y, 1) * 0.6), Y + R * (0.2 + hash(x, y, 5) * 0.6), R * 0.85, R * 0.7, col, 0.26, x * 97 + y * 13, 0.5);
+    if (hash(x, y, 2) < 0.3) wash(c, X + R * hash(x, y, 3), Y + R * hash(x, y, 4), R * 0.5, R * 0.4, '#6fa86a', 0.18, x * 7 + y * 31);
     // a few grass strokes
     c.strokeStyle = 'rgba(70,110,60,0.35)'; c.lineWidth = Math.max(1, R * 0.025); c.lineCap = 'round';
     c.beginPath();
     for (let i = 0; i < 2; i++) { const gx = X + hash(x, y, 40 + i) * R, gy = Y + hash(x, y, 50 + i) * R; c.moveTo(gx, gy); c.quadraticCurveTo(gx + R * 0.03, gy - R * 0.08, gx + R * 0.07, gy - R * 0.13); }
     c.stroke(); c.lineCap = 'butt';
-    if (hash(x, y, 60) < 0.16) {   // dabbed flowers
+    if (hash(x, y, 60) < 0.14) {   // dabbed flowers
       const fcol = ['#e56b8a', '#f2c14e', '#a78bd4', '#ef8a5a'][Math.floor(hash(x, y, 61) * 4)];
       const fx = X + R * (0.25 + hash(x, y, 62) * 0.5), fy = Y + R * (0.25 + hash(x, y, 63) * 0.5);
-      for (let i = 0; i < 5; i++) { const a = i * TAU / 5 + hash(x, y, 64); wash(c, fx + Math.cos(a) * R * 0.07, fy + Math.sin(a) * R * 0.07, R * 0.06, R * 0.06, fcol, 0.65, x + y * 3 + i); }
+      for (let i = 0; i < 5; i++) { const a = i * TAU / 5 + hash(x, y, 64); wash(c, fx + Math.cos(a) * R * 0.07, fy + Math.sin(a) * R * 0.07, R * 0.065, R * 0.065, fcol, 0.65, x + y * 3 + i); }
       c.fillStyle = INK; c.beginPath(); c.arc(fx, fy, Math.max(1, R * 0.022), 0, TAU); c.fill();
     }
   },
-  water(c, q, x, y, X, Y, R) {
-    paper(c, x, y, X, Y, R);
-    c.fillStyle = 'rgba(96,150,200,0.78)'; c.fillRect(X - R * 0.02, Y - R * 0.02, R * 1.04, R * 1.04);
-    wash(c, X + R * 0.5, Y + R * 0.5, R * 0.55, R * 0.5, '#3f78b5', 0.35, x * 11 + y * 29);
+  water(c, q, x, y, X, Y, R) { paper(c, x, y, X, Y, R); c.fillStyle = 'rgba(92,146,198,0.8)'; c.fillRect(X, Y, R, R); },
+  water2(c, q, x, y, X, Y, R) {
+    wash(c, X + R * (0.3 + hash(x, y, 1) * 0.4), Y + R * (0.3 + hash(x, y, 2) * 0.4), R * 0.75, R * 0.6, '#2f64a0', 0.22, x * 11 + y * 29);
     // paper showing through: light streaks
-    c.strokeStyle = 'rgba(245,238,221,0.55)'; c.lineWidth = Math.max(1, R * 0.05); c.lineCap = 'round';
-    c.beginPath(); const sy = Y + R * (0.25 + hash(x, y, 7) * 0.5); wobble(c, X + R * 0.1, sy, X + R * (0.5 + hash(x, y, 8) * 0.4), sy + R * 0.03, R * 0.03, x * 3 + y); c.stroke();
-    c.lineCap = 'butt';
+    if (hash(x, y, 6) < 0.6) {
+      c.strokeStyle = 'rgba(245,238,221,0.5)'; c.lineWidth = Math.max(1, R * 0.05); c.lineCap = 'round';
+      c.beginPath(); const sy = Y + R * (0.25 + hash(x, y, 7) * 0.5); wobble(c, X + R * 0.1, sy, X + R * (0.6 + hash(x, y, 8) * 0.5), sy + R * 0.03, R * 0.03, x * 3 + y); c.stroke();
+      c.lineCap = 'butt';
+    }
     // the wet edge: pooled pigment, then wobbly ink
-    c.strokeStyle = 'rgba(30,70,120,0.55)'; c.lineWidth = Math.max(2, R * 0.1);
+    c.strokeStyle = 'rgba(30,70,120,0.5)'; c.lineWidth = Math.max(2, R * 0.12);
     holeEdges(c, q, X, Y, R, isWater);
-    c.strokeStyle = rgba('#1f3a5a', 0.9); c.lineWidth = Math.max(1.2, R * 0.035); c.lineJoin = 'round';
+    c.strokeStyle = rgba('#1f3a5a', 0.95); c.lineWidth = Math.max(1.4, R * 0.04); c.lineJoin = 'round';
     holeEdges(c, q, X, Y, R, isWater, R * 0.04, x * 131 + y);
   },
   pit(c, q, x, y, X, Y, R) {
@@ -500,15 +514,24 @@ const watercolour = {
     ctx.moveTo(cx, cy); ctx.quadraticCurveTo(cx + k * 0.1, cy - k * 0.07, cx + k * 0.2, cy); ctx.quadraticCurveTo(cx + k * 0.3, cy + k * 0.07, cx + k * 0.38, cy);
   },
   rippleStyle: 'rgba(31,58,90,0.55)',
-  crate(ctx, X, Y, k) {
-    boxShape(ctx, X, Y, k, '#c89462', '#94643c', INK);
+  crate(ctx, X, Y, k) {   // painted: a wash that misses the edges, wobbly ink
+    softShadow(ctx, X + k * 0.6, Y + k * 0.98, k * 0.55, k * 0.16, 0.7, '70,70,100');
+    const y0 = Y - LIFT * k + k * 0.04;
+    ctx.fillStyle = 'rgba(176,120,70,0.85)'; ctx.fillRect(X + k * 0.07, y0 + k * 0.03, k * 0.88, k * 0.86);
+    ctx.fillStyle = 'rgba(120,78,44,0.9)'; ctx.fillRect(X + k * 0.05, y0 + k * 0.9, k * 0.9, LIFT * k - k * 0.04);
+    ctx.fillStyle = 'rgba(245,238,221,0.35)'; ctx.fillRect(X + k * 0.15, y0 + k * 0.1, k * 0.3, k * 0.12);
+    ctx.strokeStyle = INK; ctx.lineWidth = Math.max(1.4, k * 0.04); ctx.lineJoin = 'round';
+    ctx.beginPath();
+    wobble(ctx, X + k * 0.04, y0, X + k * 0.96, y0, k * 0.02, 1); wobble(ctx, X + k * 0.96, y0, X + k * 0.96, y0 + k * 0.88 + LIFT * k, k * 0.02, 2, false);
+    wobble(ctx, X + k * 0.96, y0 + k * 0.88 + LIFT * k, X + k * 0.04, y0 + k * 0.88 + LIFT * k, k * 0.02, 3, false); wobble(ctx, X + k * 0.04, y0 + k * 0.88 + LIFT * k, X + k * 0.04, y0, k * 0.02, 4, false);
+    wobble(ctx, X + k * 0.04, y0 + k * 0.9, X + k * 0.96, y0 + k * 0.9, k * 0.02, 5);
+    ctx.stroke();
     ctx.strokeStyle = 'rgba(62,49,40,0.6)'; ctx.lineWidth = Math.max(1, k * 0.03);
     ctx.beginPath(); ctx.moveTo(X + k * 0.12, Y - LIFT * k + k * 0.12); ctx.lineTo(X + k * 0.88, Y - LIFT * k + k * 0.88); ctx.moveTo(X + k * 0.88, Y - LIFT * k + k * 0.12); ctx.lineTo(X + k * 0.12, Y - LIFT * k + k * 0.88); ctx.stroke();
   },
   overlay(ctx, W, H, t, a) {
     // the unpainted margin: paper colour creeping in at the screen's edges
-    vignette(ctx, W, H, '#efe3c8', 0.75 * a, 0.62);
-    grainPass(ctx, W, H, 0, 0.18 * a);
+    vignette(ctx, W, H, '#efe3c8', 0.8 * a, 0.62);
   },
 };
 
@@ -552,11 +575,11 @@ const blueprint = {
   wall(c, q, x, y, X, Y, R) {
     const p = wallParts(q, X, Y, R);
     if (!p.so) {
-      c.fillStyle = '#123a6b'; c.fillRect(X, p.mid, R, p.bot - p.mid);
-      c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 1; hatch(c, X, p.mid, R, p.bot - p.mid, R * 0.09, -1);
+      c.fillStyle = '#163f73'; c.fillRect(X, p.mid, R, p.bot - p.mid);
+      c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1; hatch(c, X, p.mid, R, p.bot - p.mid, R * 0.08, -1);
     }
-    c.fillStyle = '#2b66ab'; c.fillRect(X, p.top, R, p.mid - p.top);
-    c.strokeStyle = 'rgba(255,255,255,0.22)'; c.lineWidth = 1; hatch(c, X, p.top, R, p.mid - p.top, R * 0.16, 1);
+    c.fillStyle = '#3f7fcc'; c.fillRect(X, p.top, R, p.mid - p.top);
+    c.strokeStyle = 'rgba(255,255,255,0.38)'; c.lineWidth = Math.max(1, R * 0.02); hatch(c, X, p.top, R, p.mid - p.top, R * 0.125, 1);
     // dimension marks along long runs: a line with end ticks and a figure
     if (!p.n && x % 6 === 2 && isW(q(1, 0)) && isW(q(2, 0))) {
       const yy = p.top + R * 0.35;
@@ -567,7 +590,7 @@ const blueprint = {
       c.font = `${Math.max(7, Math.round(R * 0.2))}px monospace`; c.textAlign = 'center'; c.textBaseline = 'bottom';
       c.fillText(`${(1 + Math.floor(hash(x, y, 1) * 9)) * 250}`, X + R * 1.5, yy - 1);
     }
-    c.strokeStyle = BP_LINE; c.lineWidth = Math.max(1.5, R * 0.04); c.lineJoin = 'miter';
+    c.strokeStyle = BP_LINE; c.lineWidth = Math.max(2, R * 0.05); c.lineJoin = 'miter';
     wallEdges(c, p, X, R);
   },
   tree(c, q, x, y, X, Y, R) {   // the plan symbol: scalloped crown, centre cross
@@ -931,12 +954,17 @@ function boxShape(ctx, X, Y, k, top, front, ink, lwF = 0.045) {
 
 // ---------------------------------------------------------------- screen passes
 
+// darkened (or tinted) edges: four bands of linear gradient, cheaper than a full-screen radial one
 function vignette(ctx, W, H, color, alpha, inner = 0.55) {
   if (alpha <= 0) return;
-  const r = Math.hypot(W, H) / 2;
-  const g = ctx.createRadialGradient(W / 2, H / 2, r * inner, W / 2, H / 2, r);
-  g.addColorStop(0, rgba(color, 0)); g.addColorStop(1, rgba(color, alpha));
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const b = Math.min(W, H) * (1 - inner) * 0.6;
+  const band = (x0, y0, x1, y1, rx, ry, rw, rh) => {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, rgba(color, alpha)); g.addColorStop(0.45, rgba(color, alpha * 0.35)); g.addColorStop(1, rgba(color, 0));
+    ctx.fillStyle = g; ctx.fillRect(rx, ry, rw, rh);
+  };
+  band(0, 0, 0, b, 0, 0, W, b); band(0, H, 0, H - b, 0, H - b, W, b);
+  band(0, 0, b, 0, 0, 0, b, H); band(W, 0, W - b, 0, W - b, 0, b, H);
 }
 let grainTile = null, grainPat = null, grainCtx = null;
 function grainPass(ctx, W, H, frame, alpha) {
@@ -1018,21 +1046,20 @@ function paintChunk(c, s, vw, cx0, cy0, R) {
   c.beginPath(); c.rect(cx0 * R, cy0 * R, CHUNK * R, CHUNK * R); c.clip();
   const rd = reader(s, vw);
   const ys = Math.max(0, cy0 - 1), ye = Math.min(s.h - 1, cy0 + CHUNK), xs = Math.max(0, cx0 - 1), xe = Math.min(s.w - 1, cx0 + CHUNK);
-  // pass 0: floors and beds; pass 1: shadows on floors; pass 2: raised things and floor props, row by row
-  for (let pass = 0; pass < 3; pass++) {
+  // pass 0: floors and beds; 1: what is painted over them (washes, edges); 2: shadows on floors;
+  // 3: raised things and floor props, row by row (so a wall's top overlaps the row behind it)
+  for (let pass = 0; pass < 4; pass++) {
     for (let y = ys; y <= ye; y++) {
       for (let x = xs; x <= xe; x++) {
         const b = rd(x, y);
         const st = styleOf(zoneOf(s, x, y));
         const q = (dx, dy) => rd(x + dx, y + dy);
         const X = x * R, Y = y * R;
-        if (pass === 0) {
-          if (b === 'w') st.water(c, q, x, y, X, Y, R);
-          else if (b === 'u') { st.water(c, q, x, y, X, Y, R); }
-          else if (b === 'o') st.pit(c, q, x, y, X, Y, R);
-          else if (b !== '#') st.floor(c, q, x, y, X, Y, R);
-        } else if (pass === 1) {
-          if (!st.shadowless && b !== '#' && b !== 'w' && b !== 'o' && b !== 'u') castShadow(c, q, X, Y, R, st.shadow);
+        const bed = b === 'w' || b === 'u' ? 'water' : b === 'o' ? 'pit' : b === '#' ? null : 'floor';
+        if (pass === 0) { if (bed) st[bed](c, q, x, y, X, Y, R); }
+        else if (pass === 1) { if (bed && st[bed + '2']) st[bed + '2'](c, q, x, y, X, Y, R); }
+        else if (pass === 2) {
+          if (!st.shadowless && bed === 'floor') castShadow(c, q, X, Y, R, st.shadow);
         } else {
           if (b === '#') st.wall(c, q, x, y, X, Y, R);
           else if (b === 'T') st.tree(c, q, x, y, X, Y, R);
@@ -1135,13 +1162,13 @@ function drawBridge(ctx, st, rd, x, y, X, Y, k, g, on) {
   }
 }
 
-function drawKey(ctx, s, x, y, X, Y, k, lit, idx, top) {
+function drawKey(ctx, s, x, y, X, Y, k, lit, idx, top, prev) {
   ctx.fillStyle = lit ? NOTE_COLORS[idx % 8] : '#fbfbf8';
   ctx.fillRect(X + k * 0.04, Y + (top ? k * 0.04 : 0), k * 0.92, k * (top ? 0.96 : 0.92));
   ctx.strokeStyle = '#343a40'; ctx.lineWidth = Math.max(1, k * 0.04);
   ctx.strokeRect(X + k * 0.04, Y + (top ? k * 0.04 : 0), k * 0.92, k * (top ? 0.96 : 0.92));
-  if (top && idx % 7 !== 2 && idx % 7 !== 6) {   // a black key between this and the next
-    ctx.fillStyle = '#212529'; rrect(ctx, X + k * 0.72, Y + k * 0.04, k * 0.56, k * 0.55, k * 0.06); ctx.fill();
+  if (top && prev && (idx - 1) % 7 !== 2 && (idx - 1) % 7 !== 6) {   // the black key between this and the last
+    ctx.fillStyle = '#212529'; rrect(ctx, X - k * 0.24, Y + k * 0.04, k * 0.48, k * 0.55, k * 0.06); ctx.fill();
   }
   if (lit) glow(ctx, X + k / 2, Y + k / 2, k * 0.9, NOTE_COLORS[idx % 8], 0.5);
 }
@@ -1154,7 +1181,7 @@ function drawVine(ctx, rd, x, y, X, Y, k, t) {
   if (!h) ctx.rotate(Math.PI / 2);
   // a soft teal under-glow: it's his to walk on
   ctx.fillStyle = rgba(SPICE_TEAL, 0.22); ctx.fillRect(-k / 2, -k * 0.34, k, k * 0.68);
-  for (const [off, w] of [[-0.12, 0.13], [0.12, 0.11]]) {
+  for (const [off, w] of [[-0.16, 0.15], [0.16, 0.13]]) {
     ctx.strokeStyle = '#0d5c55'; ctx.lineWidth = k * w + 3; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(-k / 2, k * off);
     ctx.bezierCurveTo(-k * 0.2, k * (off + 0.12), k * 0.2, k * (off - 0.12), k / 2, k * off); ctx.stroke();
@@ -1165,8 +1192,8 @@ function drawVine(ctx, rd, x, y, X, Y, k, t) {
   ctx.lineCap = 'butt';
   for (let i = 0; i < 4; i++) {
     const lx = -k * 0.38 + i * k * 0.25, side = i % 2 ? 1 : -1, sway = Math.sin(t * 2 + x + i) * 0.15;
-    ctx.save(); ctx.translate(lx, side * k * 0.2); ctx.rotate(side * 0.7 + sway);
-    ctx.beginPath(); ctx.ellipse(0, 0, k * 0.13, k * 0.07, 0, 0, TAU);
+    ctx.save(); ctx.translate(lx, side * k * 0.3); ctx.rotate(side * 0.7 + sway);
+    ctx.beginPath(); ctx.ellipse(0, 0, k * 0.17, k * 0.09, 0, 0, TAU);
     ctx.fillStyle = leaf; ctx.fill(); ctx.strokeStyle = '#0d5c55'; ctx.lineWidth = Math.max(1, k * 0.025); ctx.stroke();
     ctx.restore();
   }
@@ -1277,7 +1304,7 @@ function drawFlatEnt(ctx, s, st, e, sx, sy, k, t) {
       ctx.beginPath(); ctx.arc((px0 + px1) / 2, sy(mid), k * 1.2, 0, TAU); ctx.stroke();
       // nets: Spice scores in the left one, Sugar in the right
       for (const [gx, who] of [[e.x0 - 1, 1], [e.x1, 0]]) {
-        const X = sx(gx), Y0 = sy(e.gy0 - 0.6), Y1 = sy(e.gy1 + 0.6);
+        const X = sx(gx), Y0 = sy(Math.round(e.gy0)), Y1 = sy(Math.round(e.gy1));
         ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(X, Y0, k, Y1 - Y0);
         ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1;
         ctx.beginPath();
@@ -1377,10 +1404,11 @@ function drawEnt(ctx, s, st, e, sx, sy, k, t, H) {
     case 'sign': {
       const cx = sx(e.x + 0.5), base = sy(e.y + 0.85);
       softShadow(ctx, cx + k * 0.05, base, k * 0.3, k * 0.1, 0.8);
-      ctx.fillStyle = '#8d5a3a'; ctx.fillRect(cx - k * 0.05, base - k * 0.75, k * 0.1, k * 0.75);
-      ctx.fillStyle = '#e9c48f'; rrect(ctx, cx - k * 0.36, base - k * 1.12, k * 0.72, k * 0.48, k * 0.08); ctx.fill();
-      ctx.strokeStyle = '#5c3a1b'; ctx.lineWidth = Math.max(1.4, k * 0.045); ctx.stroke();
-      ctx.fillStyle = '#5c3a1b'; ctx.font = `900 ${Math.round(k * 0.36)}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const line = st.ink === '#ffffff';   // on a blueprint: a drawn sign, not a wooden one
+      ctx.fillStyle = line ? '#ffffff' : '#8d5a3a'; ctx.fillRect(cx - k * 0.04, base - k * 0.75, k * 0.08, k * 0.75);
+      ctx.fillStyle = line ? '#2b66ab' : '#e9c48f'; rrect(ctx, cx - k * 0.36, base - k * 1.12, k * 0.72, k * 0.48, k * 0.08); ctx.fill();
+      ctx.strokeStyle = line ? '#ffffff' : '#5c3a1b'; ctx.lineWidth = Math.max(1.4, k * 0.045); ctx.stroke();
+      ctx.fillStyle = line ? '#ffffff' : '#5c3a1b'; ctx.font = `900 ${Math.round(k * 0.36)}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('?', cx, base - k * 0.87);
       break;
     }
@@ -1566,7 +1594,7 @@ export function drawTD(ctx, s, cam, W, H, fx = [], t = s.time) {
         drawBridge(ctx, st, raw, x, y, X, Y, k, g, !!s.pressed[g]);
       } else if (ch === 'K') {
         const idx = piano ? (x - piano.x) : x;
-        drawKey(ctx, s, x, y, X, Y, k, standing(s, x, y), idx, raw(x, y - 1) !== 'K');
+        drawKey(ctx, s, x, y, X, Y, k, standing(s, x, y), idx, raw(x, y - 1) !== 'K', raw(x - 1, y) === 'K');
       } else if (ch === '$') {
         const bob = Math.sin(t * 3 + x) * k * 0.06;
         glow(ctx, X + k / 2, Y + k / 2 + bob, k * 0.9, '#ffd43b', 0.6);
@@ -1642,7 +1670,7 @@ export function snapTDCamera(c, s, W, H, instant = false) {
   const ps = live.length ? live : s.players;
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const p of ps) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); }
-  const base = Math.min(W, H) / 12;                    // about 12 tiles across the short side, close up
+  const base = Math.min(W, H) / VIEW_TILES;
   const needW = maxX - minX + 7, needH = maxY - minY + 6;
   const scale = Math.max(base * 0.45, Math.min(base, W / needW, H / needH));
   let tx = (minX + maxX) / 2, ty = (minY + maxY) / 2 - 0.3;
