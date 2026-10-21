@@ -45,7 +45,7 @@ export const THEMES = {
 export const GROUP_COLORS = [null, '#ff6b6b', '#2f7fe0', '#ffd43b', '#c5a3ff'];
 export const PLAYER_COLORS = ['#ff7eb6', '#2ec4b6'];
 const PLAYER_RIM = ['#b8326f', '#0d7c71'];
-const SOLID = '#Lx%V';
+const SOLID = '#Lx%VTK';
 const STATIC = '#LVx%^v';   // painted into the cached chunks; everything else draws live
 
 let dark = null;   // offscreen canvas for the night
@@ -577,7 +577,8 @@ function drawStatic(ctx, s, theme, T, k, sx, sy, x0, x1, y0, y1) {
     for (let cx0 = Math.floor(x0 / CHUNK) * CHUNK; cx0 <= x1; cx0 += CHUNK) {
       const sig = chunkSig(s, cx0, cy0);
       if (!sig) continue;
-      const key = `${theme}:${R}:${cx0}:${cy0}`;
+      const th = s.zones && s.zones[0].theme ? themeAt(s, cx0 + CHUNK / 2) : theme;   // the Yard: each district its own look
+      const key = `${th}:${R}:${cx0}:${cy0}`;
       let ch = store.get(key);
       if (!ch || ch.sig !== sig) {
         if (!ch) {
@@ -590,7 +591,7 @@ function drawStatic(ctx, s, theme, T, k, sx, sy, x0, x1, y0, y1) {
           store.set(key, ch);
         }
         ch.sig = sig;
-        if (ch.canvas) paintChunk(ch.canvas.getContext('2d', SOFT), s, T, cx0, cy0, R);
+        if (ch.canvas) paintChunk(ch.canvas.getContext('2d', SOFT), s, th === theme ? T : (THEMES[th] || T), cx0, cy0, R);
       }
       ch.used = chunkFrame;
       if (!ch.canvas) continue;
@@ -967,7 +968,8 @@ function drawTile(ctx, s, c, x, y, px, py, k, T, t) {
       break;
     }
     default: {
-      if (c >= '1' && c <= '8') drawPlate(ctx, s, c, x, y, px, py, k);
+      if (c === '$' || c === 'T' || c === 'K') drawYardTile(ctx, s, c, x, y, px, py, k, t);
+      else if (c >= '1' && c <= '8') drawPlate(ctx, s, c, x, y, px, py, k);
       else if (c >= 'A' && c <= 'D') drawDoor(ctx, s, c, x, y, px, py, k, above);
       else if (c >= 'a' && c <= 'd') {
         const g = c.charCodeAt(0) - 96, on = s.pressed[g];
@@ -1079,6 +1081,7 @@ function paintDoor(ctx, px, py, k, g, open, horizontal, a, b) {
 }
 
 function drawEnt(ctx, s, e, sx, sy, k, t, x0, x1) {
+  if (YARD_ENTS.includes(e.type)) { if (e.x + 6 >= x0 && e.x - 6 <= x1) drawYardEnt(ctx, s, e, sx, sy, k, t); return; }
   if (e.type === 'platform') {
     const x = sx(e.x), y = sy(e.y), w = e.w * k;
     if (x > sx(x1 + 2) || x + w < sx(x0 - 2)) return;
@@ -1526,4 +1529,174 @@ export function snapCamera(c, s, W, H, instant = false) {
   const a = instant ? 1 : 0.12;
   c.x += (tx - c.x) * a; c.y += (ty - c.y) * a; c.scale += (scale - c.scale) * a;
   return c;
+}
+
+// ---------------------------------------------------------------- the Yard: stars, toys, doors
+
+// the district a column belongs to (zones run left to right)
+export function zoneAt(s, x) {
+  let z = s.zones[0];
+  for (const q of s.zones) if (x >= q.x) z = q;
+  return z;
+}
+export function themeAt(s, x) { return zoneAt(s, x).theme || 'day'; }
+
+function star5(ctx, cx, cy, r, color) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r;
+    ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+  }
+  ctx.closePath(); ctx.fillStyle = color; ctx.fill();
+}
+export function drawStar(ctx, cx, cy, r) {
+  star5(ctx, cx, cy, r, '#f59f00');
+  star5(ctx, cx - r * 0.04, cy - r * 0.08, r * 0.82, '#ffd43b');
+  ctx.strokeStyle = '#9c5d00'; ctx.lineWidth = Math.max(1, r * 0.1); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.ellipse(cx - r * 0.25, cy - r * 0.3, r * 0.18, r * 0.1, -0.6, 0, Math.PI * 2); ctx.fill();
+}
+
+const NOTE_COLORS = ['#ff6b6b', '#ff922b', '#ffd43b', '#94d82d', '#38d9a9', '#4dabf7', '#748ffc', '#da77f2'];
+function drawYardTile(ctx, s, c, x, y, px, py, k, t) {
+  if (c === '$') {
+    const bob = Math.sin(t * 2.6 + x) * k * 0.08;
+    glow(ctx, px + k / 2, py + k / 2 + bob, k * 1.1, '#ffe066', 0.6);
+    ctx.save(); ctx.translate(px + k / 2, py + k / 2 + bob); ctx.rotate(Math.sin(t * 1.7 + x) * 0.15);
+    drawStar(ctx, 0, 0, k * 0.36); ctx.restore();
+  } else if (c === 'T') {
+    // a trampoline: springy legs, a bouncy top that squashes when someone lands
+    const squash = s.players.some((p) => !p.dead && Math.floor(p.x + p.w / 2) === x && Math.abs(p.y + p.h - y) < 0.3) ? k * 0.08 : 0;
+    ctx.fillStyle = '#495057'; ctx.fillRect(px + k * 0.12, py + k * 0.3, k * 0.1, k * 0.7); ctx.fillRect(px + k * 0.78, py + k * 0.3, k * 0.1, k * 0.7);
+    const g = ctx.createLinearGradient(0, py, 0, py + k * 0.35);
+    g.addColorStop(0, '#ff8fab'); g.addColorStop(1, '#e64980');
+    ctx.fillStyle = g; rrect(ctx, px + k * 0.02, py + squash, k * 0.96, k * 0.3, k * 0.12); ctx.fill();
+    ctx.strokeStyle = '#862e4b'; ctx.lineWidth = Math.max(1, k * 0.04); ctx.stroke();
+    ctx.strokeStyle = '#adb5bd'; ctx.lineWidth = Math.max(1, k * 0.03);
+    for (let i = 0; i < 3; i++) { const yy = py + k * (0.45 + i * 0.18); ctx.beginPath(); ctx.moveTo(px + k * 0.22, yy); ctx.lineTo(px + k * 0.78, yy + k * 0.09); ctx.stroke(); }
+  } else if (c === 'K') {
+    // a floor piano key; it lights up while someone stands on it
+    const on = s.players.some((p) => !p.dead && p.onGround && Math.floor(p.x + p.w / 2) === x && Math.abs(p.y + p.h - y) < 0.05);
+    const col = NOTE_COLORS[(x + 3) % NOTE_COLORS.length];
+    ctx.fillStyle = '#2b2d42'; ctx.fillRect(px, py, k + 1, k + 1);
+    const g = ctx.createLinearGradient(0, py, 0, py + k);
+    g.addColorStop(0, on ? '#ffffff' : '#f8f9fa'); g.addColorStop(1, on ? col : '#ced4da');
+    ctx.fillStyle = g; rrect(ctx, px + k * 0.05, py + (on ? k * 0.08 : 0), k * 0.9, k * 0.92, k * 0.1); ctx.fill();
+    ctx.fillStyle = col; ctx.fillRect(px + k * 0.15, py + (on ? k * 0.08 : 0) + k * 0.08, k * 0.7, k * 0.1);
+    if (on) glow(ctx, px + k / 2, py, k * 1.2, col, 0.5);
+  }
+}
+
+const YARD_ENTS = ['door', 'gate', 'race', 'balloons', 'ball', 'bench', 'striker', 'piano'];
+function label(ctx, text, x, y, k, color = '#ffffff', bg = 'rgba(28,20,52,0.72)') {
+  ctx.font = `800 ${Math.max(11, k * 0.36)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  const w = ctx.measureText(text).width + k * 0.4;
+  ctx.fillStyle = bg; rrect(ctx, x - w / 2, y - k * 0.3, w, k * 0.6, k * 0.3); ctx.fill();
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x, y + 1);
+}
+
+function drawYardEnt(ctx, s, e, sx, sy, k, t) {
+  switch (e.type) {
+    case 'door': {
+      const x = sx(e.x), y = sy(e.y), w = 2 * k, h = 3 * k;
+      const col = e.arcade ? '#9775fa' : e.id === 'home' ? '#f783ac' : '#ffa94d';
+      // an arched door in its frame
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; rrect(ctx, x - k * 0.12, y - h - k * 0.12, w + k * 0.24, h + k * 0.12, k * 0.9); ctx.fill();
+      const g = ctx.createLinearGradient(0, y - h, 0, y);
+      g.addColorStop(0, shade(col, 0.25)); g.addColorStop(1, shade(col, -0.25));
+      ctx.fillStyle = g; rrect(ctx, x, y - h, w, h, k * 0.85); ctx.fill();
+      ctx.strokeStyle = shade(col, -0.55); ctx.lineWidth = Math.max(1.5, k * 0.06); ctx.stroke();
+      ctx.fillStyle = 'rgba(0,0,0,0.18)'; rrect(ctx, x + k * 0.25, y - h + k * 0.35, w - k * 0.5, h - k * 0.35, k * 0.6); ctx.fill();
+      ctx.fillStyle = '#ffd43b'; ctx.beginPath(); ctx.arc(x + w - k * 0.45, y - h * 0.42, k * 0.08, 0, Math.PI * 2); ctx.fill();
+      if (e.locked) {   // a padlock
+        const lx = x + w / 2, ly = y - h * 0.5;
+        ctx.strokeStyle = '#495057'; ctx.lineWidth = Math.max(2, k * 0.08);
+        ctx.beginPath(); ctx.arc(lx, ly - k * 0.12, k * 0.2, Math.PI, 0); ctx.stroke();
+        ctx.fillStyle = '#868e96'; rrect(ctx, lx - k * 0.3, ly - k * 0.12, k * 0.6, k * 0.45, k * 0.08); ctx.fill();
+      } else if (e.wait > 0) {   // a ring fills while you both stand in the doorway
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(2, k * 0.1);
+        ctx.beginPath(); ctx.arc(x + w / 2, y - h * 0.5, k * 0.35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, e.wait / 0.8)); ctx.stroke();
+      }
+      label(ctx, e.label || e.id, x + w / 2, y - h - k * 0.55, k, e.locked ? '#ced4da' : '#ffffff');
+      break;
+    }
+    case 'race': {
+      // the start flag (chequered) on the balcony, the finish flag over the last platform
+      for (const [fx, fy, txt] of [[e.x, e.y, 'START'], [e.x1, 16, 'FINISH']]) {
+        const x = sx(fx), y = sy(fy);
+        ctx.fillStyle = '#495057'; ctx.fillRect(x - k * 0.04, y - k * 2.2, k * 0.08, k * 2.2);
+        for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) { ctx.fillStyle = (i + j) % 2 ? '#212529' : '#ffffff'; ctx.fillRect(x + k * 0.04 + i * k * 0.16, y - k * 2.15 + j * k * 0.16 + Math.sin(t * 5 + i) * k * 0.02, k * 0.16, k * 0.16); }
+        label(ctx, txt, x + k * 0.35, y - k * 2.6, k);
+      }
+      if (e.phase === 'count') label(ctx, String(Math.ceil(e.count)), sx(e.x), sy(e.y) - k * 3.6, k * 2.2, '#ffd43b');
+      else if (e.phase === 'run') label(ctx, `${e.clock.toFixed(1)}s`, sx(e.x1), sy(16) - k * 3.4, k * 1.3, '#ffffff');
+      else if (e.phase === 'rest') label(ctx, e.winner < 0 ? 'Nobody made it!' : `${e.winner ? 'Spice' : 'Sugar'} wins!`, sx(e.x1), sy(16) - k * 3.4, k * 1.3, PLAYER_COLORS[Math.max(0, e.winner)]);
+      break;
+    }
+    case 'balloons': {
+      for (const who of [0, 1]) {
+        const px = sx((who ? e.x1 : e.x) + 0.5), base = sy(e.y);
+        // the pump: a plunger that sinks when stomped
+        ctx.fillStyle = '#868e96'; rrect(ctx, px - k * 0.35, base - k * 0.5, k * 0.7, k * 0.5, k * 0.1); ctx.fill();
+        ctx.fillStyle = PLAYER_COLORS[who]; ctx.fillRect(px - k * 0.3, base - k * 0.62, k * 0.6, k * 0.12);
+        const n = e.winner === who ? 0 : e.n[who];
+        const r = k * (0.25 + n * 0.07);
+        const by = base - k * 2.2 - r;
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, base - k * 0.6); ctx.lineTo(px, by + r); ctx.stroke();
+        if (e.winner === who) { label(ctx, 'POP!', px, by, k * 1.2, '#ffd43b'); continue; }
+        const g = ctx.createRadialGradient(px - r * 0.35, by - r * 0.35, r * 0.1, px, by, r);
+        g.addColorStop(0, shade(PLAYER_COLORS[who], 0.5)); g.addColorStop(1, PLAYER_COLORS[who]);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(px, by, r * 0.9, r, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = shade(PLAYER_COLORS[who], -0.4); ctx.lineWidth = Math.max(1, k * 0.04); ctx.stroke();
+      }
+      break;
+    }
+    case 'ball': {
+      const x = sx(e.x), y = sy(e.y), r = e.r ? e.r * k : 0.35 * k;
+      // goal nets at each end of the pit, and the score
+      for (const [gx, who] of [[e.x0, 1], [e.x1 - 1, 0]]) {
+        const X = sx(gx), Y = sy(e.hy - 1.6);
+        ctx.strokeStyle = shade(PLAYER_COLORS[who], -0.2); ctx.lineWidth = Math.max(2, k * 0.08);
+        ctx.strokeRect(X + k * 0.05, Y, k * 0.9, k * 2.0);
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;
+        for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(X + k * 0.05, Y + i * k * 0.5); ctx.lineTo(X + k * 0.95, Y + i * k * 0.5); ctx.stroke(); }
+      }
+      label(ctx, `${e.score[0]} : ${e.score[1]}`, sx((e.x0 + e.x1) / 2), sy(e.hy) - k * 3.2, k * 1.1);
+      if (e.winner >= 0) label(ctx, `${e.winner ? 'Spice' : 'Sugar'} wins the footy!`, sx((e.x0 + e.x1) / 2), sy(e.hy) - k * 4.4, k * 1.1, PLAYER_COLORS[e.winner]);
+      softShadow(ctx, x, sy(e.hy + 0.35), r, r * 0.3, 0.3);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(e.x * 2);
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#212529';
+      for (let i = 0; i < 5; i++) { const a = i * Math.PI * 2 / 5; ctx.beginPath(); ctx.arc(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, r * 0.22, 0, Math.PI * 2); ctx.fill(); }
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.25, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = '#212529'; ctx.lineWidth = Math.max(1, k * 0.04); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+      break;
+    }
+    case 'bench': {
+      const x = sx(e.x), y = sy(e.y), w = e.w * k;
+      ctx.fillStyle = '#6d4c41'; ctx.fillRect(x + k * 0.2, y - k * 0.45, k * 0.12, k * 0.45); ctx.fillRect(x + w - k * 0.32, y - k * 0.45, k * 0.12, k * 0.45);
+      const g = ctx.createLinearGradient(0, y - k * 0.6, 0, y - k * 0.4);
+      g.addColorStop(0, '#d9a066'); g.addColorStop(1, '#a5714a');
+      ctx.fillStyle = g; rrect(ctx, x, y - k * 0.6, w, k * 0.18, k * 0.06); ctx.fill();
+      ctx.fillStyle = '#a5714a'; rrect(ctx, x + k * 0.1, y - k * 1.3, w - k * 0.2, k * 0.14, k * 0.06); ctx.fill();
+      rrect(ctx, x + k * 0.1, y - k * 1.0, w - k * 0.2, k * 0.14, k * 0.06); ctx.fill();
+      if (e.sit > 0) { ctx.globalAlpha = Math.min(1, e.sit / 1.5); heart(ctx, x + w / 2, y - k * 2.2 - e.sit * k * 0.3, k * 0.3, '#ff4d6d'); ctx.globalAlpha = 1; }
+      break;
+    }
+    case 'striker': {
+      const x = sx(e.x + 0.5), base = sy(e.y), top = e.top || 8;
+      // the tower with marks, the bell, the puck riding up it
+      ctx.fillStyle = '#c92a2a'; rrect(ctx, x - k * 0.18, base - top * k - k * 0.4, k * 0.36, top * k + k * 0.4, k * 0.1); ctx.fill();
+      ctx.fillStyle = '#ffe3e3';
+      for (let i = 1; i < top; i++) ctx.fillRect(x - k * 0.18, base - i * k, k * 0.36, Math.max(1, k * 0.03));
+      const ring = e.puck >= top - 0.01;
+      if (ring) glow(ctx, x, base - top * k - k * 0.6, k * 1.4, '#ffd43b', 0.8);
+      ctx.fillStyle = '#ffd43b'; ctx.beginPath(); ctx.arc(x, base - top * k - k * 0.6, k * 0.35, Math.PI, 0); ctx.lineTo(x + k * 0.42, base - top * k - k * 0.45); ctx.lineTo(x - k * 0.42, base - top * k - k * 0.45); ctx.fill();
+      ctx.fillStyle = '#212529'; rrect(ctx, x - k * 0.24, base - Math.max(0.3, Math.min(top, e.puck)) * k - k * 0.15, k * 0.48, k * 0.3, k * 0.08); ctx.fill();
+      ctx.fillStyle = '#495057'; rrect(ctx, x - k * 0.5, base - k * 0.22, k * 1.0, k * 0.22, k * 0.06); ctx.fill();   // the pad
+      if (e.best > 0) label(ctx, `best ${e.best.toFixed(1)}`, x, base - top * k - k * 1.5, k * 0.9);
+      break;
+    }
+    default: break;
+  }
 }

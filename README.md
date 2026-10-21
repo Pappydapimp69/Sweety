@@ -42,6 +42,28 @@ buttons appear the first time you touch the screen, so each of you can play
 online from a phone or tablet. Hold it sideways. If a
 controller unplugs mid-chapter, the game pauses.
 
+## The Yard (the open world)
+**Play** drops you both into the Yard, one big world between the chapters. Walk
+anywhere. Each district has its chapter's powers, its own look and music, and
+its chapter's door: stand in a door together for a moment to go in. Finish it
+and you come back out of the same door, and the next district opens.
+
+- **Stars:** 13 small optional puzzles, two in each district plus one in the
+  Plaza. Each needs both of you. Stars are saved and never block anything.
+- **Toys**, just for fun (they only keep an all-time score):
+  - **race** on the stepping stones over the Plaza: stand on the START flag together.
+  - **balloons:** stomp your own pump; first to pop wins.
+  - **footy** in the pit: run into the ball, score at the far end, first to 5.
+  - **floor piano:** walk or jump on the keys.
+  - **trampolines** in the Plaza and on the Rooftops.
+  - **the bench:** sit still on it together.
+  - **high striker** in the Workshop: Spice slams the pad; the higher he slams from, the higher it goes. Sugar can pin him a way up.
+- **Arcade doors** on the balcony start Bonk!, Heart Rain and Hot Potato.
+- Fall somewhere? You come back where you last stood, not at the start.
+  Pause → **Back to the Plaza** brings you both home.
+
+The chapters are still in **Chapters**, and online the host can pick the Yard too.
+
 ## The story (7 chapters, 30–60 minutes the first time through)
 | | Chapter | Sugar | Spice |
 |---|---|---|---|
@@ -84,6 +106,7 @@ directly.
   - level lint and physics for every power
   - scripted bots that play **every chapter** through
   - solo negative controls proving each co-op gate needs both players
+  - the Yard: walkable end to end, gates follow progress, a bot to every star with a solo control beside it, every toy played to a result, fuzz and render checks all over it
   - the twist rooms: each needs both of you, and its trick is the way through, with a control beside every "can't"
   - a check that the renderer never touches game state
   - online lockstep, replaying a whole chapter through two laggy peers
@@ -94,5 +117,6 @@ directly.
 - `node tests/gamepad.mjs`: two emulated controllers covering join, menus, stick deadzone and unplug-pauses.
 - `node tests/online.mjs [dir]`: two browsers play a chapter online through the real broker.
 - `node tests/touch.mjs [dir]`: real multi-touch events. Hold ▶ with one finger and tap A with another.
+- `node tests/yard.mjs [dir]` and `node tests/online-yard.mjs [dir]`: the Yard in a browser (every district, a star saved, in a door and back out) and online (both through a door together and back).
 - `node tests/switch.mjs [dir]`: the splash (`?splash`), trading characters on the title and in a level, and solo switching.
 - Design notes: `docs/blueprint.md`.

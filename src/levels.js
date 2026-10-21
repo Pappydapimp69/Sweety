@@ -1,3 +1,4 @@
+import { YARD } from './yard.js';
 // Levels as ASCII, built from sections joined left to right. Every map is H rows.
 //
 //  #  ground            ^  spikes            P / Q  Sugar / Spice start
@@ -474,5 +475,5 @@ export const STORY = {
 for (const c of [...CHAPTERS, ...MINIGAMES]) { c.ents = c.map.ents || []; c.offsets = c.map.offsets || {}; }
 
 export function chapterById(id) {
-  return CHAPTERS.find((c) => c.id === id) || MINIGAMES.find((c) => c.id === id);
+  return CHAPTERS.find((c) => c.id === id) || MINIGAMES.find((c) => c.id === id) || (id === 'yard' ? YARD : undefined);
 }

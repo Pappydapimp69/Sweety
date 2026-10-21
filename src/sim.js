@@ -8,7 +8,7 @@ export const SPICE = 1;
 export const NAMES = ['Sugar', 'Spice'];
 
 const EPS = 1e-6;
-const SOLID_BASE = '#Lx%V';
+const SOLID_BASE = '#Lx%VTK';   // T trampoline, K piano key (the Yard)
 
 export const NO_INPUT = Object.freeze({
   left: false, right: false, down: false, jump: false, ability: false,
@@ -33,8 +33,12 @@ export function createRun(chapterId, opts = {}) {
       if (t === 'P' || t === 'Q') { spawns[t === 'P' ? 0 : 1] = { x, y }; grid[y][x] = '.'; }
       else if (t >= '1' && t <= '8') plates.push({ x, y, g: plateGroup(t), heavy: t >= '5', ceil: false });
       else if (t === 'h') heartsTotal++;
+      else if (t === '$' && opts.stars && opts.stars.includes(starKey(x, y))) grid[y][x] = '.';   // already found
     }
   }
+  // the Yard: a district's gate is wall until its chapter is unlocked (an input, like the map)
+  const unlocked = opts.unlocked ?? 1;
+  for (const e of ch.ents || []) if (e.type === 'gate' && unlocked <= e.need) for (let y = e.y0; y <= e.y1; y++) grid[y][e.x] = '#';
   // a plate with a ceiling over it and air under it is pressed from below (upside-down feet)
   for (const pl of plates) {
     const below = tileRaw(grid, w, h, pl.x, pl.y + 1), above = tileRaw(grid, w, h, pl.x, pl.y - 1);
@@ -46,7 +50,7 @@ export function createRun(chapterId, opts = {}) {
     while (top > 0 && y - top < C.VENT_REACH && !SOLID_BASE.includes(grid[top - 1][x])) top--;
     vents.push({ x, top, bottom: y });
   }
-  const ents = (ch.ents || []).map((e, i) => ({ ...e, i, t: 0, x: e.path ? e.path[0][0] : e.x, y: e.path ? e.path[0][1] : e.y, prevX: 0, prevY: 0, spin: 0 }));
+  const ents = (ch.ents || []).map((e, i) => ({ ...e, i, t: 0, x: e.path ? e.path[0][0] : e.x, y: e.path ? e.path[0][1] : e.y, prevX: 0, prevY: 0, spin: 0, ...toyState(e, unlocked) }));
   for (const e of ents) { placeMover(e); e.prevX = e.x; e.prevY = e.y; }
   for (const e of ents) if (e.type === 'sign' && e.y === undefined) {   // stand it on the floor below
     const cx = Math.floor(e.x);
@@ -70,9 +74,15 @@ export function createRun(chapterId, opts = {}) {
     score: [0, 0], winner: -1, round: 0, holder: -1, fuse: 0, passCool: 0, timeLeft: 0, nextDrop: 0,
     rng: seedWords(opts.seed ?? 20261012),
     complete: false, time: 0, tick: 0,
+    yard: !!ch.yard, unlocked, starsGot: 0, starsTotal: 0,
     events: [],
   };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (grid[y][x] === '$') s.starsTotal++;
   for (const p of s.players) placeAtSpawn(s, p);
+  if (opts.at) {   // the Yard: come back out of the door you went in by
+    const d = ents.find((e) => e.type === 'door' && e.id === opts.at);
+    if (d) for (const p of s.players) { p.x = d.x + 1 + (p.id === SUGAR ? -0.55 : 0.55) - p.w / 2; p.y = d.y - p.h; p.prevY = p.y; }
+  }
   if (mode === 'rain') s.timeLeft = C.RAIN_TIME;
   if (mode === 'potato') startPotatoRound(s);
   return s;
@@ -88,6 +98,7 @@ function makePlayer(id, ch) {
     slamming: false, launched: false, bright: false, freezing: false, gliding: false,
     stun: 0, cool: 0, pushT: 0, dashT: 0, airUsed: false,
     dead: false, deadT: 0, prevY: 0, wave: 0, safe: null, landT: 0, safeCandidate: false,
+    landed: false, slamY: 0, keyCell: -1,
   };
 }
 
@@ -95,6 +106,21 @@ export function plateGroup(t) {
   const n = t.charCodeAt(0) - 48;          // '1'..'8'
   return n > 4 ? n - 4 : n;
 }
+export const starKey = (x, y) => `${x}:${y}`;
+
+// Per-toy state lives on its entity, so it is part of the run (and of the online fingerprint).
+function toyState(e, unlocked) {
+  switch (e.type) {
+    case 'door': return { locked: unlocked <= e.need, wait: 0 };
+    case 'race': return { phase: 'idle', count: 0, clock: 0, rest: 0, winner: -1 };
+    case 'balloons': return { n: [0, 0], rest: 0, winner: -1 };
+    case 'ball': return { vx: 0, vy: 0, hx: e.x, hy: e.y, score: [0, 0], wait: 0, kick: [0, 0], winner: -1, rest: 0 };
+    case 'bench': return { sit: 0, n: 0 };
+    case 'striker': return { puck: 0, best: 0 };
+    default: return {};
+  }
+}
+
 const doorGroup = (t) => t.charCodeAt(0) - 64;     // 'A'..'D' -> 1..4
 const bridgeGroup = (t) => t.charCodeAt(0) - 96;   // 'a'..'d' -> 1..4
 function tileRaw(grid, w, h, x, y) {
@@ -354,7 +380,7 @@ export function step(s, inputs) {
     moveX(s, p, dxs[o.id]);
     if (o.id > p.id) { const dy = o.y - o.prevY; if (dy < 0) moveY(s, p, dy); }
   }
-  if (s.mode === 'chapter') leash(s, dxs);
+  if (s.mode === 'chapter' && !s.ents.some((e) => e.type === 'race' && e.phase === 'run')) leash(s, dxs);
   updateShots(s);
   updateGusts(s);
   if (s.flood) updateFlood(s);
@@ -365,6 +391,7 @@ export function step(s, inputs) {
     s.talked.push(e.id);
     s.events.push({ type: 'talk', id: e.id });
   }
+  if (s.yard) updateYard(s);
   if (s.mode === 'rain') updateRain(s);
   if (s.mode === 'potato') updatePotato(s);
   if (s.mode === 'chapter') {
@@ -422,7 +449,7 @@ function updatePlayer(s, p, inp) {
   if (p.dead) {
     p.deadT -= C.DT;
     if (p.deadT <= 0) {
-      placeAtSpawn(s, p, s.gentle && p.safe ? p.safe : null);
+      placeAtSpawn(s, p, (s.gentle || s.yard) && p.safe ? p.safe : null);
       s.events.push({ type: 'respawn', who: p.id });
     }
     return 0;
@@ -488,6 +515,7 @@ function updatePlayer(s, p, inp) {
   const wasGround = p.onGround;
   const vyBefore = p.vy;
   const landed = moveY(s, p, p.vy * C.DT);
+  p.landed = !!landed && !wasGround;
   p.onGround = !!landed;
   p.standOn = landed ? landed.who : -1;
   p.ride = landed ? landed.ride : -1;
@@ -496,6 +524,10 @@ function updatePlayer(s, p, inp) {
     p.airUsed = false;
     if (s.bonk && p.standOn >= 0 && vyBefore >= C.BONK_MIN_VY) bonk(s, p, s.players[p.standOn]);
     else if (p.slamming) slamLand(s, p);
+    else if (!wasGround && vyBefore > 3 && p.grav > 0 && feetCells(p).some(([cx, cy]) => tileAt(s, cx, cy) === 'T')) {
+      p.vy = -(inp.jump ? C.TRAMP_V_HELD : C.TRAMP_V); p.onGround = false; p.standOn = -1; p.ride = -1; p.launched = true;
+      s.events.push({ type: 'boing', who: p.id, x: p.x + p.w / 2, y: p.y + p.h });
+    }
     else if (!wasGround && Math.abs(vyBefore) > 8) { p.landT = 0.12; s.events.push({ type: 'land', who: p.id, x: p.x + p.w / 2, y: p.grav > 0 ? p.y + p.h : p.y, hard: Math.abs(vyBefore) > 18 }); }
     p.safeCandidate = p.standOn < 0 && p.ride < 0;   // recorded after hazards are checked this step
   }
@@ -534,7 +566,7 @@ function useAbility(s, p, power) {
     }
     case 'slam': {
       if (!p.onGround && !p.slamming) {
-        p.slamming = true; p.vx = 0; p.vy = C.SLAM_V;
+        p.slamming = true; p.vx = 0; p.vy = C.SLAM_V; p.slamY = p.y + p.h;
         s.events.push({ type: 'slam', who: p.id });
       }
       break;
@@ -705,6 +737,139 @@ function updateFlood(s) {
   }
 }
 
+// ---------------------------------------------------------------- the Yard: doors and toys
+// Nothing here can stop you finishing anything: toys keep their own score and reset.
+
+const live = (s) => s.players.filter((p) => !p.dead);
+const within = (p, x0, x1, ft) => p.x + p.w / 2 >= x0 && p.x + p.w / 2 <= x1 && p.onGround && p.grav > 0 && Math.abs(p.y + p.h - ft) < 0.05;
+
+function updateYard(s) {
+  const both = live(s).length === 2;
+  for (const e of s.ents) {
+    switch (e.type) {
+      case 'door': {   // both of you in the doorway, a moment, and in you go
+        const here = both && s.players.every((p) => within(p, e.x - 0.2, e.x + 2.2, e.y));
+        if (!here) { e.wait = 0; break; }
+        if (e.wait < 0) break;   // already went (or bumped a lock) this visit
+        e.wait += C.DT;
+        if (e.wait >= C.DOOR_TIME) { e.wait = -1; s.events.push({ type: e.locked ? 'locked' : 'enter', id: e.id }); }
+        break;
+      }
+      case 'race': raceStep(s, e, both); break;
+      case 'balloons': balloonStep(s, e); break;
+      case 'ball': ballStep(s, e); break;
+      case 'bench': {   // sit still on it together for a moment
+        if (e.sit < 0) { e.sit = Math.min(0, e.sit + C.DT); break; }   // after a cuddle, a little pause
+        const sitting = both && s.players.every((p) => within(p, e.x, e.x + e.w, e.y) && Math.abs(p.vx) < 0.5);
+        e.sit = sitting ? e.sit + C.DT : 0;
+        if (e.sit >= C.BENCH_TIME) { s.events.push({ type: 'cuddle', n: e.n++, x: e.x + e.w / 2, y: e.y - 1.5 }); e.sit = -4; }
+        break;
+      }
+      case 'striker': {
+        if (e.puck > 0) e.puck = Math.max(0, e.puck - C.DT * 4);
+        for (const ev of s.events) {
+          if (ev.type !== 'thud' || Math.abs(ev.x - (e.x + 0.5)) > 0.9 || Math.abs(ev.y - e.y) > 0.05) continue;
+          const p = s.players[ev.who];
+          const h = Math.max(0, Math.round((ev.y - p.slamY) * 10) / 10);
+          e.puck = Math.min(e.top, h); e.best = Math.max(e.best, h);
+          s.events.push({ type: 'strike', who: ev.who, h, bell: h >= e.top });
+        }
+        break;
+      }
+    }
+  }
+  // floor piano: a note each time a foot finds a new key
+  for (const p of s.players) {
+    if (p.dead || !p.onGround || p.grav < 0) { p.keyCell = -1; continue; }
+    const cx = Math.floor(p.x + p.w / 2), cy = Math.floor(p.y + p.h + 0.01);
+    const cell = tileAt(s, cx, cy) === 'K' ? cy * s.w + cx : -1;
+    if (cell >= 0 && cell !== p.keyCell) { const pi = s.ents.find((e) => e.type === 'piano'); s.events.push({ type: 'note', who: p.id, x: cx, y: cy, k: pi ? cx - pi.x : 0 }); }
+    p.keyCell = cell;
+  }
+}
+
+// Race: both on the start flag -> 3-2-1 -> first to the finish flag. The flags are e.x and e.x1.
+function raceStep(s, e, both) {
+  if (e.phase === 'rest') { e.rest -= C.DT; if (e.rest <= 0) { e.phase = 'idle'; e.winner = -1; } return; }
+  const atStart = both && s.players.every((p) => within(p, e.x - 1.6, e.x + 1.6, e.y));
+  if (e.phase === 'idle') { if (atStart) { e.phase = 'count'; e.count = C.RACE_COUNT; } return; }
+  if (e.phase === 'count') {
+    if (!atStart) { e.phase = 'idle'; return; }
+    const before = Math.ceil(e.count);
+    e.count -= C.DT;
+    if (Math.ceil(e.count) !== before && e.count > 0) s.events.push({ type: 'tick3', n: Math.ceil(e.count) });
+    if (e.count <= 0) { e.phase = 'run'; e.clock = 0; s.events.push({ type: 'raceGo' }); }
+    return;
+  }
+  // run
+  e.clock += C.DT;
+  const done = s.players.filter((p) => !p.dead && p.x + p.w / 2 >= e.x1 && p.y + p.h <= e.y + 0.05);
+  if (done.length || e.clock > C.RACE_MAX) {
+    e.winner = done.length ? done[0].id : -1;
+    e.phase = 'rest'; e.rest = C.TOY_REST;
+    s.events.push({ type: 'raceEnd', who: e.winner, t: Math.round(e.clock * 100) / 100 });
+  }
+}
+
+// Balloons: stomp your own pump (land on it). First balloon to pop wins.
+function balloonStep(s, e) {
+  if (e.winner >= 0) { e.rest -= C.DT; if (e.rest <= 0) { e.winner = -1; e.n = [0, 0]; } return; }
+  for (const p of s.players) {
+    if (p.dead || !p.landed) continue;
+    const px = p.id === SUGAR ? e.x : e.x1;
+    if (!feetCells(p).some(([cx, cy]) => cx === px && cy === e.y)) continue;
+    e.n[p.id]++;
+    s.events.push({ type: 'pump', who: p.id, n: e.n[p.id] });
+    if (e.n[p.id] >= C.PUMP_POP) { e.winner = p.id; e.rest = C.TOY_REST; s.events.push({ type: 'pop', who: p.id, x: px + 0.5, y: e.y - 2 }); }
+  }
+}
+
+// Footy: a ball you kick by running or jumping into it. Sugar scores at the right end
+// (x1), Spice at the left (x0). First to FOOTY_WIN.
+function ballStep(s, e) {
+  const r = C.BALL_R;
+  if (e.rest > 0) { e.rest -= C.DT; if (e.rest <= 0) { e.score = [0, 0]; e.winner = -1; } }
+  if (e.wait > 0) { e.wait -= C.DT; return; }
+  for (let i = 0; i < 2; i++) if (e.kick[i] > 0) e.kick[i] -= C.DT;
+  // kicks
+  for (const p of s.players) {
+    if (p.dead || e.kick[p.id] > 0) continue;
+    const nx = Math.max(p.x, Math.min(e.x, p.x + p.w)), ny = Math.max(p.y, Math.min(e.y, p.y + p.h));
+    if ((nx - e.x) * (nx - e.x) + (ny - e.y) * (ny - e.y) > r * r) continue;
+    const cx = p.x + p.w / 2;
+    const dir = e.x > cx + 0.02 ? 1 : e.x < cx - 0.02 ? -1 : p.facing;
+    e.vx = dir * Math.max(C.KICK * 0.7, Math.abs(p.vx) * 1.3);
+    e.vy = -(p.onGround ? 6 : 10) - (p.vy < 0 ? 3 : 0);
+    e.kick[p.id] = 0.15;
+    s.events.push({ type: 'kick', who: p.id, x: e.x, y: e.y });
+  }
+  // fly: gravity, a speed cap under one radius per step, bounce off tiles
+  e.vy += C.BALL_G * C.DT;
+  const sp = Math.sqrt(e.vx * e.vx + e.vy * e.vy);   // sqrt is exact IEEE; hypot is not pinned across engines
+  if (sp > C.BALL_MAX) { e.vx *= C.BALL_MAX / sp; e.vy *= C.BALL_MAX / sp; }
+  const solidAt = (x, y) => solidTile(s, Math.floor(x), Math.floor(y));
+  const nx = e.x + e.vx * C.DT;
+  if (solidAt(nx + Math.sign(e.vx) * r, e.y)) e.vx = -e.vx * 0.6; else e.x = nx;
+  const ny = e.y + e.vy * C.DT;
+  if (solidAt(e.x, ny + Math.sign(e.vy) * r)) {
+    if (e.vy > 0) { e.y = Math.floor(ny + r) - r; e.vx *= 0.9; }
+    e.vy = Math.abs(e.vy) < 2.5 ? 0 : -e.vy * 0.5;
+  } else e.y = ny;
+  if (e.vy === 0 && solidAt(e.x, e.y + r + 0.05)) e.vx *= 0.97;
+  if (Math.abs(e.vx) < 0.05) e.vx = 0;
+  // goals and strays
+  const scorer = e.x < e.x0 + 1 ? 1 : e.x > e.x1 - 1 ? 0 : -1;   // the end tiles are the goals
+  const stray = e.x < e.x0 - 1 || e.x > e.x1 + 1 || e.y > s.h || e.y < e.hy - 8;
+  if (scorer >= 0 && e.y > e.hy - 4) {
+    if (e.winner < 0) {
+      e.score[scorer]++;
+      s.events.push({ type: 'goal', who: scorer, x: e.x, y: e.y, score: [...e.score] });
+      if (e.score[scorer] >= C.FOOTY_WIN) { e.winner = scorer; e.rest = C.TOY_REST + 1; s.events.push({ type: 'footyWin', who: scorer }); }
+    }
+    e.x = e.hx; e.y = e.hy; e.vx = 0; e.vy = 0; e.wait = 1;
+  } else if (stray) { e.x = e.hx; e.y = e.hy; e.vx = 0; e.vy = 0; e.wait = 0.5; }
+}
+
 function touch(s, p) {
   if (p.dead) return;
   if (p.y > s.h + 1 || p.y + p.h < -3) return kill(s, p);
@@ -721,6 +886,10 @@ function touch(s, p) {
         s.grid[cy][cx] = '.';
         s.hearts++;
         s.events.push({ type: 'heart', who: p.id, x: cx + 0.5, y: cy + 0.5 });
+      } else if (t === '$') {
+        s.grid[cy][cx] = '.';
+        s.starsGot++;
+        s.events.push({ type: 'star', who: p.id, x: cx + 0.5, y: cy + 0.5, key: starKey(cx, cy) });
       } else if (t === '!') {
         if (!s.checkpoint || cx > s.checkpoint.x) {   // forward only: walking back over an old flag keeps the newer one
           s.checkpoint = { x: cx, y: cy };

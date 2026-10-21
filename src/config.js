@@ -67,3 +67,18 @@ export const POTATO_ROUNDS = 3;     // first to this many wins
 export const POTATO_MIN = 9;
 export const POTATO_MAX = 16;
 export const POTATO_PASS_COOLDOWN = 0.6;
+
+// ---- the Yard (open world): doors and toys
+export const DOOR_TIME = 0.8;       // both of you in a doorway this long -> in you go
+export const TRAMP_V = 25;          // a trampoline bounce (~5 tiles); holding jump bounces higher
+export const TRAMP_V_HELD = 29;
+export const RACE_COUNT = 3;        // 3-2-1 on the start flag
+export const RACE_MAX = 60;         // a race nobody finishes gives up
+export const PUMP_POP = 12;         // stomps to pop a balloon
+export const TOY_REST = 2.5;        // a finished toy waits this long before it resets
+export const BALL_R = 0.35;
+export const BALL_G = 30;
+export const BALL_MAX = 18;         // < one radius per step: the ball never tunnels a wall
+export const KICK = 10;
+export const FOOTY_WIN = 5;
+export const BENCH_TIME = 1.5;

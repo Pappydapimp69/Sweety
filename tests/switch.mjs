@@ -22,6 +22,11 @@ const check = (ok, what) => { console.log(`${ok ? 'ok' : 'FAIL'} - ${what}`); if
 const wait = (ms) => page.waitForTimeout(ms);
 const app = (f) => page.evaluate(f);
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png` });
+// wait for a state, not a time: a slow software-rendered frame can take most of a second
+async function until(f, arg, ms = 6000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await page.evaluate(f, arg)) return true; await wait(50); } return false; }
+// hold a key until someone has moved, then let go and let them stop
+async function holdUntilMoved(key, who, from) { await page.keyboard.down(key); await until(([w, f]) => window.__sweety.app.run.players[w].x > f + 1.2, [who, from], 5000); await page.keyboard.up(key); await until(() => window.__sweety.app.run.players.every((p) => Math.abs(p.vx) < 0.05), null, 3000); }
+const devs = (want) => until((w) => JSON.stringify(window.__sweety.app.devices) === w, want);
 
 try {
   // ---- splash: Stupido, then Stu, then Studios, then the title
@@ -37,44 +42,49 @@ try {
 
   // skip with a key
   await page.goto(`http://127.0.0.1:${PORT}/index.html?splash`);
-  await wait(500); await page.keyboard.press('Space'); await wait(150);
-  check(await app(() => window.__sweety.app.screen) === 'title', 'a key skips the splash');
+  await until(() => window.__sweety.app.splashT > 0.4); await page.keyboard.press('Space');
+  check(await until(() => window.__sweety.app.screen === 'title'), 'a key skips the splash');
 
   // ---- title: two join, right trades sides
   await page.goto(`http://127.0.0.1:${PORT}/index.html`);
-  await wait(400);
-  await page.keyboard.press('KeyW'); await page.keyboard.press('ArrowUp'); await wait(150);
-  check(JSON.stringify(await app(() => window.__sweety.app.devices)) === '["kbL","kbR"]', 'both join');
-  await page.keyboard.press('KeyD'); await wait(150);
-  check(JSON.stringify(await app(() => window.__sweety.app.devices)) === '["kbR","kbL"]', 'D on the title trades characters');
+  await until(() => window.__sweety.app.screen === 'title' && window.__sweety.app.t > 0.3);
+  await page.keyboard.press('KeyW'); await page.keyboard.press('ArrowUp');
+  check(await devs('["kbL","kbR"]'), 'both join');
+  await page.keyboard.press('KeyD');
+  check(await devs('["kbR","kbL"]'), 'D on the title trades characters');
   await shot('s3-traded');
 
   // ---- mid-level trade: Tab hands the characters over, the world is untouched
-  await app(() => window.__sweety.start('garden')); await wait(800);
+  await app(() => window.__sweety.start('garden'));
+  await until(() => window.__sweety.app.run.tick > 40 && window.__sweety.app.run.players.every((p) => p.onGround));
   const before = await app(() => window.__sweety.app.run.players.map((p) => [p.x, p.y]));
-  await page.keyboard.press('Tab'); await wait(150);
-  check(JSON.stringify(await app(() => window.__sweety.app.devices)) === '["kbL","kbR"]', 'Tab in a level trades back');
+  await page.keyboard.press('Tab');
+  check(await devs('["kbL","kbR"]'), 'Tab in a level trades back');
   const after = await app(() => window.__sweety.app.run.players.map((p) => [Math.round(p.x * 10), Math.round(p.y * 10)]));
   check(after.every((a, i) => Math.abs(a[0] - Math.round(before[i][0] * 10)) <= 1), 'nobody moved');
   // the left half now drives Sugar again
-  await page.keyboard.down('KeyD'); await wait(400); await page.keyboard.up('KeyD');
+  await holdUntilMoved('KeyD', 0, before[0][0]);
   const xs = await app(() => window.__sweety.app.run.players.map((p) => p.x));
   check(xs[0] > before[0][0] + 1 && Math.abs(xs[1] - before[1][0]) < 0.2, `D moves Sugar, not Spice (${before.map(b=>b[0].toFixed(2))} -> ${xs.map(x=>x.toFixed(2))})`);
 
   // ---- solo: one keyboard half, Tab flips who it drives
   await page.goto(`http://127.0.0.1:${PORT}/index.html`);
-  await wait(400);
-  await page.keyboard.press('KeyW'); await wait(600); await page.keyboard.press('KeyW'); await wait(200);
-  check(await app(() => window.__sweety.app.screen) === 'menu', 'alone: jump again goes to the menu');
-  await page.keyboard.press('Space'); await wait(200);
-  check(await app(() => window.__sweety.app.screen) === 'chapters', 'Story opens with one player');
-  await app(() => window.__sweety.start('garden')); await wait(800);
+  await until(() => window.__sweety.app.screen === 'title' && window.__sweety.app.t > 0.3);
+  await page.keyboard.press('KeyW');
+  await until(() => window.__sweety.app.devices[0] === 'kbL'); await wait(600);
+  await page.keyboard.press('KeyW');
+  check(await until(() => window.__sweety.app.screen === 'menu'), 'alone: jump again goes to the menu');
+  await page.keyboard.press('Space');
+  check(await until(() => window.__sweety.app.screen === 'play' && window.__sweety.app.run?.chapterId === 'yard'), 'Play opens the Yard with one player');
+  await app(() => window.__sweety.start('garden'));
+  await until(() => window.__sweety.app.run.chapterId === 'garden' && window.__sweety.app.run.tick > 40 && window.__sweety.app.run.players.every((p) => p.onGround));
   const s0 = await app(() => window.__sweety.app.run.players.map((p) => p.x));
-  await page.keyboard.down('KeyD'); await wait(400); await page.keyboard.up('KeyD'); await wait(100);
+  await holdUntilMoved('KeyD', 0, s0[0]);
   const s1 = await app(() => window.__sweety.app.run.players.map((p) => p.x));
   check(s1[0] > s0[0] + 1 && Math.abs(s1[1] - s0[1]) < 0.2, 'solo drives Sugar first');
-  await page.keyboard.press('Tab'); await wait(150);
-  await page.keyboard.down('KeyD'); await wait(400); await page.keyboard.up('KeyD'); await wait(100);
+  await page.keyboard.press('Tab');
+  await until(() => window.__sweety.app.active === 1);
+  await holdUntilMoved('KeyD', 1, s1[1]);
   const s2 = await app(() => window.__sweety.app.run.players.map((p) => p.x));
   check(s2[1] > s1[1] + 1 && Math.abs(s2[0] - s1[0]) < 0.2, 'after Tab the same keys drive Spice');
   await shot('s4-solo-spice');

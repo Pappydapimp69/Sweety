@@ -3,7 +3,8 @@
 import { DT, MAX_STEPS } from './config.js';
 import { CHAPTERS, MINIGAMES, STORY, chapterById } from './levels.js';
 import { createRun, step, NAMES, powerOf, NO_INPUT } from './sim.js';
-import { drawWorld, drawCharacter, snapCamera, makeCamera, textPx, PLAYER_COLORS, heart } from './render.js';
+import { drawWorld, drawCharacter, snapCamera, makeCamera, textPx, PLAYER_COLORS, heart, zoneAt, drawStar } from './render.js';
+import { YARD } from './yard.js';
 import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads, padConnected, initTouch, setTouchLayout, touchSeen } from './input.js';
 import { loadProgress, saveProgress } from './save.js';
 import { unlockAudio, playEvents, sfx, setVolumes } from './audio.js';
@@ -115,10 +116,18 @@ function beginChapter(id) {
   else startRun(id);
 }
 
-function startRun(id) {
+const YARD_STARS = YARD.map.join('').split('$').length - 1;
+// What the Yard is built from: your progress, or, online, the host's (both machines must agree).
+function yardOpts(at = null) {
+  return { unlocked: app.progress.unlocked, stars: Object.keys(app.progress.stars), at };
+}
+function startRun(id, extra = null) {
   const ch = chapterById(id);
   const gentle = app.online ? !!app.online.gentle : S().gentle;
-  app.run = createRun(id, { gentle });
+  const opts = { gentle };
+  if (id === 'yard') Object.assign(opts, extra || (app.online && app.online.yardOpts) || yardOpts(app.yardAt));
+  app.run = createRun(id, opts);
+  app.zone = null; app.pendingEnter = null;
   if (app.online) startLockstep();
   app.cam = makeCamera(app.run);
   snapCamera(app.cam, app.run, W, H, true);
@@ -126,6 +135,19 @@ function startRun(id) {
   app.banner = 6;
   go('play');
   playMusic(ch.music || 'garden');
+}
+
+// Into the Yard (at a door you came out of, or at the start). Online, the host decides.
+function enterYard(at = null) {
+  app.yardAt = at; app.fromYard = null;
+  if (app.online) { if (app.online.role === 'host') onlineStart('yard', false, at); return; }
+  startRun('yard', yardOpts(at));
+}
+// Both of you stood in a door: in you go (and back out here when it's done)
+function doEnter(id) {
+  app.fromYard = id; app.yardAt = id;
+  if (app.online) { if (app.online.role === 'host') onlineStart(id); return; }
+  if (MINIGAMES.some((m) => m.id === id)) startRun(id); else beginChapter(id);
 }
 
 // ---------------------------------------------------------------- online
@@ -140,13 +162,15 @@ function startLockstep() {
   o.inbox = keep;
 }
 
-function onlineStart(id, restart = false) {   // host picks; both machines start the same chapter
+function onlineStart(id, restart = false, at = null) {   // host picks; both machines start the same chapter
   const o = app.online;
   o.round++;
   o.gentle = S().gentle;
   o.ls = null;   // the last round's lockstep must not swallow this round's inputs
-  net.send({ t: 'start', id, gentle: o.gentle, round: o.round, restart });
-  if (restart) startRun(id); else beginChapter(id);
+  o.yardOpts = id === 'yard' ? (restart && o.yardOpts ? o.yardOpts : yardOpts(at)) : o.yardOpts;
+  if (id !== 'yard' && !restart) { app.fromYard = app.fromYard || null; }
+  net.send({ t: 'start', id, gentle: o.gentle, round: o.round, restart, yard: id === 'yard' ? o.yardOpts : null, from: app.fromYard });
+  if (restart || id === 'yard') startRun(id); else beginChapter(id);
 }
 
 function onNetData(m) {
@@ -161,7 +185,9 @@ function onNetData(m) {
     if (o.role === 'guest') { o.slot = 1 - m.hostSlot; o.status = 'connected'; o.hostUnlocked = m.unlocked; sfx('confirm'); }
   } else if (m.t === 'start' && o.role === 'guest') {
     o.round = m.round; o.gentle = m.gentle; o.ls = null;
-    if (m.restart) startRun(m.id); else beginChapter(m.id);
+    if (m.yard) o.yardOpts = m.yard;
+    app.fromYard = m.from || null;
+    if (m.restart || m.id === 'yard') startRun(m.id); else beginChapter(m.id);
   } else if (m.t === 'pause') o.partnerPaused = true;
   else if (m.t === 'resume') o.partnerPaused = false;
   else if (m.t === 'credits' && o.role === 'guest') go('credits');
@@ -225,6 +251,10 @@ function finishRun() {
 
 function afterComplete() {
   const id = app.run.chapterId;
+  if (app.fromYard && id !== 'home') {   // came in from the Yard: go back out the same door
+    if (app.online && app.online.role !== 'host') return;
+    enterYard(app.fromYard); return;
+  }
   const idx = CHAPTERS.findIndex((c) => c.id === id);
   const startNext = app.online ? onlineStart : (i) => (CHAPTERS.some((c) => c.id === i) ? beginChapter(i) : startRun(i));
   if (app.online && app.online.role !== 'host') return;   // the host decides what's next
@@ -279,7 +309,8 @@ function updateTitle() {
 const twoHere = () => (app.devices[0] && app.devices[1]) || (app.online && app.online.status === 'connected') || soloLocal();
 const needTwo = () => say('Two players needed: join a second controller or keyboard half on the title screen, or play online.');
 const MAIN_MENU = [
-  { label: 'Story', go: () => { if (!twoHere()) return needTwo(); app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); } },
+  { label: 'Play', go: () => { if (!twoHere()) return needTwo(); enterYard(app.yardAt); } },
+  { label: 'Chapters', go: () => { if (!twoHere()) return needTwo(); app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); } },
   { label: 'Mini-games', go: () => { if (!twoHere()) return needTwo(); go('minis'); } },
   { label: 'Play online', go: () => { app.onlineIndex = 0; go('online'); } },
   { label: 'Settings', go: () => { app.settingsBack = 'menu'; go('settings'); } },
@@ -341,12 +372,13 @@ function updateOnline() {
   }
   if (o.status === 'connected') {
     if (o.role === 'host') {
-      const n = 3;
+      const n = 4;
       app.onlineIndex = move(app.onlineIndex, m.down - m.up, n);
       if (m.ok) {
         sfx('confirm');
-        if (app.onlineIndex === 0) { app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); }
-        else if (app.onlineIndex === 1) go('minis');
+        if (app.onlineIndex === 0) enterYard(null);
+        else if (app.onlineIndex === 1) { app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); }
+        else if (app.onlineIndex === 2) go('minis');
         else leaveOnline();
       }
     }
@@ -405,9 +437,12 @@ function updateStory() {
 // "Back to checkpoint" brings BOTH of you back to the last flag: the way out of
 // any spot where one of you is stranded. It travels as an input, so online works too.
 function pauseItems() {
-  const back = app.run && app.run.mode === 'chapter' ? ['Back to checkpoint (both)'] : [];
-  if (!app.online) return ['Keep playing', ...back, 'Restart', 'Settings', 'Quit to menu'];
-  return app.online.role === 'host' ? ['Keep playing', ...back, 'Restart (both of you)', 'Settings', 'Leave online game'] : ['Keep playing', ...back, 'Settings', 'Leave online game'];
+  const inYard = app.run && app.run.yard;
+  const back = app.run && app.run.mode === 'chapter' ? [inYard ? 'Back to the Plaza (both)' : 'Back to checkpoint (both)'] : [];
+  const restart = inYard ? [] : [app.online ? 'Restart (both of you)' : 'Restart'];
+  const yard = app.fromYard && !inYard ? ['Back to the Yard'] : [];
+  if (!app.online) return ['Keep playing', ...back, ...restart, ...yard, 'Settings', 'Quit to menu'];
+  return app.online.role === 'host' ? ['Keep playing', ...back, ...restart, ...yard, 'Settings', 'Leave online game'] : ['Keep playing', ...back, 'Settings', 'Leave online game'];
 }
 function pauseGame() {
   if (app.screen !== 'play') return;
@@ -426,7 +461,8 @@ function updatePause() {
     if (m.ok) {
       const item = pauseItems()[app.pauseIndex];
       if (item === 'Keep playing') resume();
-      else if (item.startsWith('Back to checkpoint')) { app.regroup = true; resume(); }
+      else if (item.startsWith('Back to checkpoint') || item.startsWith('Back to the Plaza')) { app.regroup = true; resume(); }
+      else if (item === 'Back to the Yard') enterYard(app.fromYard);
       else if (item.startsWith('Restart')) onlineStart(app.run.chapterId, true);
       else if (item === 'Settings') { app.settingsBack = 'pause'; go('settings'); }
       else { app.run = null; leaveOnline(); }
@@ -438,10 +474,11 @@ function updatePause() {
   if (m.ok) {
     const item = pauseItems()[app.pauseIndex];
     if (item === 'Keep playing') resume();
-    else if (item.startsWith('Back to checkpoint')) { app.regroup = true; resume(); }
+    else if (item.startsWith('Back to checkpoint') || item.startsWith('Back to the Plaza')) { app.regroup = true; resume(); }
+    else if (item === 'Back to the Yard') enterYard(app.fromYard);
     else if (item === 'Restart') startRun(app.run.chapterId);
     else if (item === 'Settings') { app.settingsBack = 'pause'; go('settings'); }
-    else { const story = CHAPTERS.some((c) => c.id === app.run.chapterId); app.run = null; go(story ? 'chapters' : 'minis'); }
+    else { const id = app.run.chapterId; app.run = null; app.fromYard = null; go(id === 'yard' ? 'menu' : CHAPTERS.some((c) => c.id === id) ? 'chapters' : 'minis'); }
   }
 }
 
@@ -449,6 +486,7 @@ function updateComplete() {
   const m = menuInput();
   if (m.ok || m.any && !m.back) afterComplete();
   else if (m.back) {
+    if (app.fromYard) { afterComplete(); return; }
     if (app.online) { if (app.online.role === 'host') net.send({ t: 'lobby' }); app.run = null; app.online.ls = null; go('online'); return; }
     const story = CHAPTERS.some((c) => c.id === app.run.chapterId); app.run = null; go(story ? 'chapters' : 'minis');
   }
@@ -457,7 +495,10 @@ function updateComplete() {
 function updateCredits(dt) {
   app.creditsT += dt;
   const m = menuInput();
-  if ((m.any || m.back) && app.creditsT > 1.5) go(app.online ? 'online' : 'menu');
+  if ((m.any || m.back) && app.creditsT > 1.5) {
+    if (app.fromYard && (!app.online || app.online.role === 'host')) { enterYard('home'); return; }
+    go(app.online ? 'online' : 'menu');
+  }
 }
 
 let acc = 0;
@@ -480,6 +521,7 @@ function updatePlayOnline(dt) {
   if (k >= MAX_STEPS) acc = 0;
   const { run, n } = lsAdvance(ls, app.run, MAX_STEPS, (r) => onEvents(r.events));
   app.run = run;
+  if (app.pendingEnter) { const id = app.pendingEnter; app.pendingEnter = null; if (o.role === 'host') doEnter(id); return; }
   o.stall = n > 0 || lsReady(ls) ? 0 : o.stall + dt;   // waiting only if nothing ran this frame
   if (app.run.complete) { app.ending = app.run.mode === 'chapter' ? 1.4 : 1.8; app.screen = 'ending'; }
 }
@@ -494,6 +536,7 @@ function updatePlay(dt) {
     if (app.regroup) { inputs[0] = { ...inputs[0], regroup: true }; app.regroup = false; }
     step(app.run, inputs);   // run the tick first: the partner's jump pressed with the pause still counts
     onEvents(app.run.events);
+    if (app.pendingEnter) { const id = app.pendingEnter; app.pendingEnter = null; doEnter(id); return; }
     if (inputs.some((i) => i.pausePressed)) { pauseGame(); acc = 0; return; }
     acc -= DT; steps++;
     if (app.run.complete) { app.ending = app.run.mode === 'chapter' ? 1.4 : 1.8; app.screen = 'ending'; return; }
@@ -532,6 +575,55 @@ function onEvents(events) {
       const lines = (STORY.talk || {})[e.id] || [];
       lines.forEach(([who, text], i) => app.bubbles.push({ who: NAMES.indexOf(who), text, life: 3.2, delay: i * 2.6 }));
     }
+    yardEvent(e);
+  }
+}
+
+// The Yard: doors, stars and toys. Toys only ever keep score for fun.
+const CUDDLES = [
+  [['Sugar', 'Nice view.'], ['Spice', 'I wasn\'t looking at the view.']],
+  [['Spice', 'Five more minutes?'], ['Sugar', 'Ten.']],
+  [['Sugar', 'Remember our first date?'], ['Spice', 'You laughed at my hat.']],
+  [['Spice', 'Best yard in the world.'], ['Sugar', 'Best company in it.']],
+  [['Sugar', 'Tired?'], ['Spice', 'Never, with you.']],
+];
+function tally(toy, who) {
+  if (who < 0) return;
+  const t = app.progress.tally[toy] || [0, 0];
+  t[who]++; app.progress.tally[toy] = t; save();
+  return t;
+}
+function yardEvent(e) {
+  const P = app.progress;
+  switch (e.type) {
+    case 'enter': app.pendingEnter = e.id; break;
+    case 'locked': say(e.id === 'home' ? 'Home opens when you have finished the Clocktower.' : 'Finish the chapter before this one to open it.'); break;
+    case 'star': {
+      if (!P.stars[e.key]) { P.stars[e.key] = true; save(); }
+      say(`★ A star! ${Object.keys(P.stars).length} of ${YARD_STARS}`);
+      break;
+    }
+    case 'raceEnd': {
+      if (e.who < 0) { say('Nobody made it to the finish.'); break; }
+      const t = tally('race', e.who);
+      const best = !P.records.race || e.t < P.records.race;
+      if (best) { P.records.race = e.t; save(); }
+      say(`${NAMES[e.who]} wins the race in ${e.t.toFixed(2)}s${best ? ' (a new best!)' : ''}. All time: Sugar ${t[0]}, Spice ${t[1]}.`);
+      break;
+    }
+    case 'pop': { const t = tally('balloons', e.who); say(`${NAMES[e.who]} popped it first! All time: Sugar ${t[0]}, Spice ${t[1]}.`); break; }
+    case 'footyWin': { const t = tally('footy', e.who); say(`${NAMES[e.who]} wins the footy! All time: Sugar ${t[0]}, Spice ${t[1]}.`); break; }
+    case 'strike': {
+      if (!P.records.striker || e.h > P.records.striker) { P.records.striker = e.h; save(); }
+      if (e.bell) say(`DING! Spice rang the bell from ${e.h.toFixed(1)} up.`);
+      break;
+    }
+    case 'cuddle': {
+      P.cuddles = (P.cuddles || 0) + 1; save();
+      CUDDLES[e.n % CUDDLES.length].forEach(([who, text], i) => app.bubbles.push({ who: NAMES.indexOf(who), text, life: 3.2, delay: i * 2.6 }));
+      break;
+    }
+    default: break;
   }
 }
 
@@ -562,6 +654,13 @@ function spawnFx(events) {
       case 'flip': case 'small': case 'big': app.fx.push({ x, y, vx: 0, vy: 0, life: 0.4, max: 0.4, kind: 'ring', color: PLAYER_COLORS[e.who] }); break;
       case 'boom': add(24, 'dot', '#ff922b', 9); break;
       case 'respawn': app.fx.push({ x, y, vx: 0, vy: 0, life: 0.5, max: 0.5, kind: 'ring', color: PLAYER_COLORS[e.who] }); break;
+      case 'star': add(14, 'dot', '#ffd43b', 7); app.fx.push({ x, y, vx: 0, vy: 0, life: 0.6, max: 0.6, kind: 'ring', color: '#ffd43b' }); break;
+      case 'pop': add(18, 'dot', PLAYER_COLORS[e.who], 9); break;
+      case 'goal': add(16, 'dot', PLAYER_COLORS[e.who], 8); break;
+      case 'cuddle': add(10, 'heart', '#ff4d6d', 3, 1.2); break;
+      case 'boing': add(5, 'dot', '#ff8fab', 3, 0.3); break;
+      case 'note': add(1, 'dot', '#ffffff', 1.5, 0.5); break;
+      case 'strike': if (e.bell) add(16, 'dot', '#ffd43b', 7); break;
       default: break;
     }
   }
@@ -578,6 +677,21 @@ function watchPowers(dt) {
   }
   app.powers = now;
   if (app.toast) app.toast.life -= dt;
+}
+
+// The Yard: walking into a district says its name and plays its music.
+const DISTRICT_MUSIC = { 'The Plaza': 'home', 'The Garden': 'garden', 'The Workshop': 'toolbox', 'The Night Meadow': 'night', 'The Attic': 'attic', 'The Rooftops': 'sky', 'The Clock Yard': 'clock' };
+function watchZone(dt) {
+  if (app.zoneBanner) app.zoneBanner.life -= dt;
+  const s = app.run;
+  if (!s || !s.yard) return;
+  const mid = (s.players[0].x + s.players[1].x) / 2 + 0.5;
+  const z = zoneAt(s, mid);
+  if (app.zone !== z.name) {
+    if (app.zone) app.zoneBanner = { name: z.name, life: 3 };
+    app.zone = z.name;
+    playMusic(DISTRICT_MUSIC[z.name] || 'home');
+  }
 }
 
 function updateFx(dt) {
@@ -863,7 +977,7 @@ function drawChapters() {
   cards(CHAPTERS.map((c, i) => {
     const got = app.progress.hearts[c.id] || 0, tot = c.map.join('').split('h').length - 1;
     return { kicker: `Chapter ${i + 1}`, name: c.name, tagline: c.tagline, locked: chapterLocked(i), footer: chapterLocked(i) ? '' : `♥ ${got} / ${tot}${app.progress.done[c.id] ? '  ✓' : ''}` };
-  }), app.chapterIndex, 'Story', `${done} of ${CHAPTERS.length} chapters finished`);
+  }), app.chapterIndex, 'Chapters', `${done} of ${CHAPTERS.length} chapters finished`);
   navHint();
 }
 
@@ -915,7 +1029,7 @@ function drawOnline() {
   // connected
   couple(W / 2, H * 0.42, Math.min(110, H * 0.14));
   txt(`Connected! You are ${NAMES[o.slot]}.`, W / 2, H * 0.5, { size: P * 1.3, color: '#3c096c', shadow: false });
-  if (o.role === 'host') menuList(['Story', 'Mini-games', 'Leave'], W / 2, H * 0.6, app.onlineIndex, P);
+  if (o.role === 'host') menuList(['The Yard', 'Chapters', 'Mini-games', 'Leave'], W / 2, H * 0.6, app.onlineIndex, P);
   else txt(`${NAMES[1 - o.slot]} is choosing what to play…`, W / 2, H * 0.62, { size: P, color: '#5a189a', shadow: false });
   hint(o.role === 'host' ? `move: ${L.nav}  ·  ok: ${L.ok}  ·  back: ${L.back} (leave)` : `back: ${L.back} (leave)`);
 }
@@ -966,7 +1080,8 @@ function drawPlay() {
   const s = app.run, ch = chapterById(s.chapterId);
   ctx.save();
   if (app.shake > 0) ctx.translate((Math.random() - 0.5) * app.shake * 22, (Math.random() - 0.5) * app.shake * 22);
-  drawWorld(ctx, s, app.cam, W, H, app.fx, ch.theme, app.t);
+  const zone = s.zones && s.zones[0].theme ? zoneAt(s, app.cam.x) : null;
+  drawWorld(ctx, s, app.cam, W, H, app.fx, zone ? zone.theme : ch.theme, app.t);
   drawSigns(s);
   drawBubbles(s);
   if (soloLocal() && s.mode === 'chapter') drawActiveMarker(s);
@@ -976,13 +1091,25 @@ function drawPlay() {
   const fade = ctx.createLinearGradient(0, 0, 0, P * 3.2);
   fade.addColorStop(0, 'rgba(20,10,35,0.35)'); fade.addColorStop(1, 'rgba(20,10,35,0)');
   ctx.fillStyle = fade; ctx.fillRect(0, 0, W, P * 3.2);
-  txt(ch.name, 16, 24, { align: 'left', size: P });
+  txt(s.yard && app.zone ? app.zone : ch.name, 16, 24, { align: 'left', size: P });
   if (s.mode !== 'chapter') {
     txt(`${s.score[0]}`, W / 2 - 60, 40, { size: P * 2.2, color: PLAYER_COLORS[0] });
     txt('vs', W / 2, 40, { size: P });
     txt(`${s.score[1]}`, W / 2 + 60, 40, { size: P * 2.2, color: PLAYER_COLORS[1] });
     if (s.mode === 'rain') txt(`${Math.max(0, Math.ceil(s.timeLeft))}s`, W / 2, 40 + P * 1.8, { size: P });
     if (s.mode === 'potato') txt(`round ${s.round}`, W / 2, 40 + P * 1.8, { size: P * 0.8 });
+  } else if (s.yard) {
+    const label = `${Object.keys(app.progress.stars).length} / ${YARD_STARS}`;
+    ctx.font = `700 ${P}px ${FONT}`;
+    const tw = ctx.measureText(label).width, pw = tw + P * 2.6;
+    panel(W - 12 - pw, 24 - P * 0.85, pw, P * 1.7, 'rgba(28,20,52,0.55)', P * 0.85);
+    drawStar(ctx, W - 12 - pw + P * 0.95, 24, P * 0.5);
+    txt(label, W - 12 - P * 0.7, 24, { align: 'right', size: P, color: '#fff3bf', shadow: false });
+    if (app.zoneBanner && app.zoneBanner.life > 0) {
+      ctx.globalAlpha = Math.min(1, app.zoneBanner.life, (3 - app.zoneBanner.life) * 3);
+      txt(app.zoneBanner.name, W / 2, H * 0.3, { size: P * 2.2 });
+      ctx.globalAlpha = 1;
+    }
   } else if (s.heartsTotal) {
     const label = `${s.hearts} / ${s.heartsTotal}`;
     ctx.font = `700 ${P}px ${FONT}`;
@@ -1158,6 +1285,7 @@ function frame(now) {
       if (app.banner > 0) app.banner -= dt;
       updateFx(dt);
       watchPowers(dt);
+      watchZone(dt);
       if (app.run) snapCamera(app.cam, app.run, W, H);
       if (app.screen === 'play' || app.screen === 'ending') drawPlay();
       break;
@@ -1228,5 +1356,6 @@ window.__sweety = {
   joinCode: (c) => { go('online'); joinOnline(c); },
   net,
   start: (id) => startRun(id),
+  yard: (at = null) => enterYard(at),
   begin: (id) => beginChapter(id),
 };

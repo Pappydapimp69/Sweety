@@ -3,7 +3,27 @@
 const KEY = 'sweety:progress';
 
 export const DEFAULT_SETTINGS = Object.freeze({ music: 6, sfx: 8, gentle: false, shake: true });
-const fresh = () => ({ unlocked: 1, hearts: {}, done: {}, settings: { ...DEFAULT_SETTINGS }, seenCredits: false });
+const fresh = () => ({ unlocked: 1, hearts: {}, done: {}, settings: { ...DEFAULT_SETTINGS }, seenCredits: false, stars: {}, tally: {}, records: {}, cuddles: 0 });
+
+// the Yard's additions (Brain T3): additive, every field defaulted, so an old save loads unchanged
+const STAR_KEY = /^\d{1,3}:\d{1,2}$/;
+function cleanStars(o) {
+  const out = {};
+  if (o && typeof o === 'object' && !Array.isArray(o)) for (const k of Object.keys(o)) if (STAR_KEY.test(k) && o[k] === true) out[k] = true;
+  return out;
+}
+function cleanTally(o) {
+  const out = {};
+  if (o && typeof o === 'object' && !Array.isArray(o)) for (const [k, v] of Object.entries(o)) {
+    if (Array.isArray(v) && v.length === 2 && v.every((n) => Number.isFinite(n) && n >= 0)) out[k] = v.map(Math.floor);
+  }
+  return out;
+}
+function cleanRecords(o) {
+  const out = {};
+  if (o && typeof o === 'object' && !Array.isArray(o)) for (const [k, v] of Object.entries(o)) if (Number.isFinite(v) && v > 0 && v < 1e6) out[k] = v;
+  return out;
+}
 
 // keep only finite, non-negative whole numbers: a hand-edited save can't show "♥ lots"
 function cleanCounts(o) {
@@ -30,6 +50,10 @@ export function loadProgress() {
         shake: typeof st.shake === 'boolean' ? st.shake : DEFAULT_SETTINGS.shake,
       },
       seenCredits: !!p.seenCredits,
+      stars: cleanStars(p.stars),
+      tally: cleanTally(p.tally),
+      records: cleanRecords(p.records),
+      cuddles: Number.isFinite(p.cuddles) && p.cuddles >= 0 ? Math.floor(p.cuddles) : 0,
     };
   } catch { return fresh(); }
 }

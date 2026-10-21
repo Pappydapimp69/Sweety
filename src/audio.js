@@ -83,9 +83,30 @@ const SFX = {
   round: () => tone(587, 0.15, { type: 'square', vol: 0.05 }),
   pass: () => tone(784, 0.07, { type: 'square', vol: 0.05 }),
   boom: () => tone(80, 0.6, { type: 'sawtooth', vol: 0.12, slide: -40 }),
+  // the Yard
+  star: () => [988, 1319, 1568, 1976].forEach((f, i) => tone(f, 0.18, { type: 'triangle', vol: 0.08, delay: i * 0.06 })),
+  boing: () => tone(180, 0.3, { type: 'sine', vol: 0.12, slide: 500 }),
+  note: (who, e) => {   // C major pentatonic up the keys; Sugar's notes ring a little brighter
+    const step = [0, 2, 4, 7, 9][e.k % 5] + 12 * Math.floor(e.k / 5);
+    const f = 261.63 * 2 ** (step / 12);
+    tone(f, 0.45, { type: who ? 'triangle' : 'sine', vol: 0.14 });
+    tone(f * 2, 0.25, { type: 'sine', vol: 0.03 });
+  },
+  pump: (who) => tone(who ? 300 : 360, 0.08, { type: 'triangle', vol: 0.07, slide: 120 }),
+  pop: () => { tone(1400, 0.06, { type: 'square', vol: 0.1, slide: -1200 }); tone(90, 0.2, { vol: 0.12 }); },
+  kick: () => tone(140, 0.08, { type: 'triangle', vol: 0.12, slide: -60 }),
+  goal: () => [523, 784, 1047].forEach((f, i) => tone(f, 0.2, { type: 'square', vol: 0.05, delay: i * 0.08 })),
+  footyWin: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.25, { vol: 0.1, delay: i * 0.1 })),
+  tick3: () => tone(660, 0.12, { type: 'square', vol: 0.06 }),
+  raceGo: () => tone(1320, 0.3, { type: 'square', vol: 0.07 }),
+  raceEnd: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.22, { vol: 0.09, delay: i * 0.09 })),
+  cuddle: () => [659, 784].forEach((f, i) => tone(f, 0.5, { vol: 0.07, delay: i * 0.25 })),
+  strike: (who, e) => { tone(80, 0.2, { type: 'triangle', vol: 0.15 }); if (e.bell) [1568, 2093, 1568].forEach((f, i) => tone(f, 0.6, { vol: 0.09, delay: 0.15 + i * 0.12 })); },
+  enter: () => [392, 523, 659].forEach((f, i) => tone(f, 0.18, { type: 'triangle', vol: 0.08, delay: i * 0.07 })),
+  locked: () => tone(140, 0.15, { type: 'square', vol: 0.06 }),
 };
 
 export function playEvents(events) {
-  for (const e of events) if (SFX[e.type]) SFX[e.type](e.who);
+  for (const e of events) if (SFX[e.type]) SFX[e.type](e.who, e);
 }
 export const sfx = (name) => SFX[name] && SFX[name]();
