@@ -67,10 +67,11 @@ try {
   await page.keyboard.press('Escape'); await wait(200);
   check(await screen() === 'pause', 'Esc pauses');
   await shot('06-pause');
-  await press('ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp');
+  // down to the bottom and one back up lands on Settings (the item above Quit), whatever is above it
+  await press('ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp');
   await wait(100);
   const pi = await page.evaluate(() => [window.__sweety.app.pauseIndex, window.__sweety.app.screen]);
-  check(pi[0] === 3, `pause menu moves with the arrows (${pi})`);
+  check(pi[0] === 4, `pause menu moves with the arrows (${pi})`);
   await page.keyboard.press('Space'); await wait(200);
   check(await screen() === 'settings', 'pause → settings');
   await press('ArrowDown', 'ArrowDown', 'ArrowRight'); await wait(150);
