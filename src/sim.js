@@ -2,7 +2,7 @@
 // (mini-games draw from a seeded sfc32 whose state words live in the run).
 import * as C from './config.js';
 import { chapterById } from './levels.js';
-import { createWorld, step as tdStep } from './td/sim.js';
+import { createWorld, step as tdStep, powerOf as tdPowerOf } from './td/sim.js';
 import { WORLD } from './td/world.js';
 
 export const SUGAR = 0;
@@ -134,6 +134,7 @@ function tileRaw(grid, w, h, x, y) {
 
 // The power a player has where they stand (the finale changes powers by zone).
 export function powerOf(s, p) {
+  if (s.td) return tdPowerOf(s, p);
   if (s.zones) {
     const cx = p.x + p.w / 2;
     let z = s.zones[0];

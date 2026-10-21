@@ -6,14 +6,14 @@
 import { NO_INPUT as I } from './sim.js';
 import { chapterById } from './levels.js';
 
-let P = null, B = null;   // the routes and the bot helpers, loaded on demand
+let P = null, B = null, TP = null, TB = null;   // the routes and the bot helpers, loaded on demand
 let loading = null;
 export function preloadAI() {
-  loading ??= Promise.all([import('../tests/phases.mjs'), import('../tests/bots.mjs')])
-    .then(([p, b]) => { P = p; B = b; }).catch(() => { loading = null; });
+  loading ??= Promise.all([import('../tests/phases.mjs'), import('../tests/bots.mjs'), import('../tests/tdphases.mjs'), import('../tests/tdbots.mjs')])
+    .then(([p, b, tp, tb]) => { P = p; B = b; TP = tp; TB = tb; }).catch(() => { loading = null; });
   return loading;
 }
-export const aiReady = () => !!(P && B);
+export const aiReady = () => !!(P && B && TP && TB);
 
 const ROUTES = {
   garden: () => P.gardenPhases(), toolbox: () => P.toolboxPhases(), night: () => P.nightPhases(),
@@ -24,6 +24,10 @@ const cx = (p) => p.x + p.w / 2, feet = (p) => p.y + p.h;
 const STUCK = 1200;   // ticks without a step of the plan getting done
 
 export function makeAI(run) {
+  if (run.td) {   // the island: each region's plan you haven't finished, then follow
+    const route = TP ? [...(run.hearts.includes(0) ? [] : TP.meadowPhases()), ...(run.hearts.includes(1) ? [] : TP.workshopPhases())] : [];
+    return { route: route.length ? route : null, i: 0, cpI: 0, wait: 0, still: 0, tries: {}, lost: false, ready: aiReady() };
+  }
   const route = P && ROUTES[run.chapterId] ? ROUTES[run.chapterId]() : null;
   return { route, i: 0, cpI: 0, wait: 0, still: 0, tries: {}, lost: false, ready: aiReady() };
 }
@@ -40,6 +44,7 @@ export function aiInputs(ai, s, slots) {
     let n = 0;
     const was = ai.i;
     while (ai.i < ai.route.length && ai.route[ai.i].done(s) && n++ < 50) ai.i++;
+    if (s.td && ai.i >= ai.route.length) { ai.route = null; return aiInputs(ai, s, slots); }   // the plan's done: tag along
     ai.wait = ai.i === was ? ai.wait + 1 : 0;
     const ph = ai.route[Math.min(ai.i, ai.route.length - 1)];
     const both = ph.ctrl(s);
@@ -53,8 +58,17 @@ export function aiInputs(ai, s, slots) {
     }
     return out;
   }
+  if (s.td) { for (const k of slots) out[k] = tdFollow(s, k); return out; }
   for (const k of slots) out[k] = s.mode === 'chapter' ? yardHelper(ai, s, k) : arcade(s, k);   // the Yard, or a chapter whose plan was dropped
   return out;
+}
+
+// ---------------------------------------------------------------- the island: stay near you
+function tdFollow(s, k) {
+  const me = s.players[k], you = s.players[1 - k];
+  if (me.dead || you.dead || you.fly || you.hop) return I;
+  if (Math.hypot(you.x - me.x, you.y - me.y) < 1.8) return I;
+  return TB.go(s, me, you.x, you.y);
 }
 
 // ---------------------------------------------------------------- the Yard: follow and help
