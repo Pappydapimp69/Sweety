@@ -88,6 +88,18 @@ try {
     await page.evaluate((c) => window.__sweety.start(c), id);
     await page.keyboard.down('ArrowLeft'); await wait(500); await page.keyboard.up('ArrowLeft');
   }
+  // the top-down island: footsteps walk in all four directions
+  await page.evaluate(() => window.__sweety.island());
+  await wait(1200);
+  const td = await page.evaluate(() => !!window.__sweety.app.run.td);
+  check(td, 'the island opens');
+  const tdQuiet = await peakFor(400);
+  await page.keyboard.down('KeyW'); await page.keyboard.down('KeyS');
+  await page.keyboard.up('KeyW');
+  const tdWalk = await peakFor(1200);
+  await page.keyboard.up('KeyS');
+  console.log(`  island: bed ${tdQuiet.toFixed(3)}, walking ${tdWalk.toFixed(3)}`);
+  check(tdWalk > tdQuiet * 1.3 && tdWalk < 0.98, 'walking on the island makes footsteps');
   await page.keyboard.press('Escape'); await wait(300);
   const zone = await page.evaluate(() => window.__sweety.app.screen);
   check(zone === 'pause', 'pause still works');

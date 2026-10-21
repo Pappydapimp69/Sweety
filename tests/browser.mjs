@@ -48,7 +48,7 @@ try {
   await press('ArrowDown', 'ArrowUp', 'KeyW', 'ArrowDown');
   await wait(100);
   check(await page.evaluate(() => window.__sweety.app.menuIndex) === 0 && await screen() === 'menu', 'up / W move the cursor and never confirm');
-  await page.keyboard.press('ArrowDown'); await wait(80);   // Play (the Yard) is first; Chapters is next
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await wait(80);   // Play (the island), the Yard, then Chapters
   await page.keyboard.press('Enter'); await wait(300);
   check(await screen() === 'chapters', 'Enter on Chapters opens the chapter list');
   await shot('03-chapters');

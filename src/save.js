@@ -3,7 +3,8 @@
 const KEY = 'sweety:progress';
 
 export const DEFAULT_SETTINGS = Object.freeze({ music: 6, sfx: 8, gentle: false, shake: true, alone: 'switch' });
-const fresh = () => ({ unlocked: 1, hearts: {}, done: {}, settings: { ...DEFAULT_SETTINGS }, seenCredits: false, stars: {}, tally: {}, records: {}, cuddles: 0 });
+const fresh = () => ({ unlocked: 1, hearts: {}, done: {}, settings: { ...DEFAULT_SETTINGS }, seenCredits: false, stars: {}, tally: {}, records: {}, cuddles: 0, world: freshWorld() });
+const freshWorld = () => ({ unlocked: [], hearts: [], stars: [] });
 
 // the Yard's additions (Brain T3): additive, every field defaulted, so an old save loads unchanged
 const STAR_KEY = /^\d{1,3}:\d{1,2}$/;
@@ -23,6 +24,14 @@ function cleanRecords(o) {
   const out = {};
   if (o && typeof o === 'object' && !Array.isArray(o)) for (const [k, v] of Object.entries(o)) if (Number.isFinite(v) && v > 0 && v < 1e6) out[k] = v;
   return out;
+}
+
+// the top-down world (Brain T3, additive like the Yard's): region numbers lit and won, stars as "x:y"
+const WSTAR = /^\d{1,3}:\d{1,3}$/;
+function cleanWorld(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return freshWorld();
+  const regions = (a) => (Array.isArray(a) ? [...new Set(a.filter((n) => Number.isInteger(n) && n >= 0 && n < 16))].sort((x, y) => x - y) : []);
+  return { unlocked: regions(o.unlocked), hearts: regions(o.hearts), stars: Array.isArray(o.stars) ? [...new Set(o.stars.filter((k) => typeof k === 'string' && WSTAR.test(k)))] : [] };
 }
 
 // keep only finite, non-negative whole numbers: a hand-edited save can't show "♥ lots"
@@ -55,6 +64,7 @@ export function loadProgress() {
       tally: cleanTally(p.tally),
       records: cleanRecords(p.records),
       cuddles: Number.isFinite(p.cuddles) && p.cuddles >= 0 ? Math.floor(p.cuddles) : 0,
+      world: cleanWorld(p.world),
     };
   } catch { return fresh(); }
 }

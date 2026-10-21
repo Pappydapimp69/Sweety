@@ -21,6 +21,9 @@ const PLACES = {
   sky: { zone: 'openPlain', surface: 'sandstone', water: null },
   clock: { zone: 'rockyGully', surface: 'sandstone', water: null },
   home: { zone: 'room', surface: 'wood', water: { preset: 'rain', at: [0, 12] } },
+  // the island's regions (top-down)
+  plaza: { zone: 'openPlain', surface: 'sandstone', water: { preset: 'stream', at: [10, -8] } },
+  meadow: { zone: 'openPlain', surface: 'packedDirt', water: { preset: 'stream', at: [-14, 8] } },
 };
 const place = (theme) => PLACES[theme] || PLACES.day;
 
@@ -44,6 +47,7 @@ let zone = '';
 let players = [];             // last frame's players, to place events that only say who
 let stride = [0, 0];
 let lastTheme = 'day';
+const view = { x: 0, y: 0 };   // camera centre in tiles
 
 export function startSoundscape(context, destination) {
   if (eng || pending || !context || !context.audioWorklet) return;
@@ -59,13 +63,16 @@ export function startSoundscape(context, destination) {
 
 export const soundscapeOn = () => !!eng && eng.ctx.state === 'running';
 
-// game tiles -> engine metres; the listener faces into the screen (+y), up is +z
-const at = (src, x, y) => src.setPosition(x * M, DEPTH, -y * M);
+// game tiles -> engine metres. Side view: the listener faces into the screen
+// (+y), up is +z. Top-down: the listener hangs above the view, up the screen is +y.
+let topDown = false;
+const at = (src, x, y) => (topDown ? src.setPosition(x * M, -y * M, -DEPTH) : src.setPosition(x * M, DEPTH, -y * M));
+const feetOf = (p) => [p.x + (p.w ?? 0) / 2, p.y + (p.h ?? 0)];
 
 function placeOf(e) {
   if (Number.isFinite(e.x) && Number.isFinite(e.y)) return [e.x, e.y];
   const p = players[e.who];
-  return p ? [p.x + p.w / 2, p.y + p.h] : [eng.listener.x / M, -eng.listener.z / M];
+  return p ? feetOf(p) : [view.x, view.y];
 }
 
 function strike(material, e, amp, brightness) {
@@ -80,7 +87,7 @@ function strike(material, e, amp, brightness) {
 function stepAt(i, p, surface, { speed, gain = 1 } = {}) {
   const f = feet[i];
   if (!f) return;
-  at(f, p.x + p.w / 2, p.y + p.h);
+  at(f, ...feetOf(p));
   f._spatial();
   const mass = p.size === 'small' ? 4 : p.size === 'big' ? 30 : 12;
   f.step({ mass, speed: Math.max(0.5, speed), surface, gain: gain * (p.id === 0 ? 0.85 : 1) });
@@ -108,6 +115,8 @@ const HITS = {
   glass: (e) => { strike('glass', e, 0.5, 0.75); return true; },
   strike: (e) => { strike('stone', e, 0.8, 0.4); if (e.bell) setTimeout(() => eng && strike('bell', e, 0.7, 0.55), 150); return true; },
   flood: (e) => { splash(e, 400, 1.5); return false; },
+  sink: (e) => { splash(e, 150, 1.1); return false; },
+  shove: (e) => { strike('wood', e, 0.35, 0.4); return false; },
   boom: (e) => { strike('stone', e, 1, 0.15); return false; },
 };
 
@@ -127,13 +136,15 @@ export function soundFrame(view, dt) {
     const pl = place(view.theme);
     lastTheme = view.theme;
     players = run.players || [];
-    eng.setListener({ x: cam.x * M, y: 0, z: -cam.y * M, yaw: 0 });
+    topDown = !!run.td;
+    view.x = cam.x; view.y = cam.y;
+    eng.setListener(topDown ? { x: cam.x * M, y: -cam.y * M, z: 0, yaw: 0 } : { x: cam.x * M, y: 0, z: -cam.y * M, yaw: 0 });
     if (pl.zone !== zone) { zone = pl.zone; eng.setZone(zone); }
     setBed(pl.water, view.theme, cam);
     players.forEach((p, i) => {
       if (i > 1 || !p || p.dead) return;
-      const grounded = p.onGround !== false && !(p.z > 0.05) && !p.gliding;
-      const speed = Math.hypot(p.vx || 0, p.onGround === undefined ? p.vy || 0 : 0) * M;   // m/s
+      const grounded = p.onGround !== false && !(p.hop > 0) && !p.fly && !p.gliding;
+      const speed = Math.hypot(p.vx || 0, topDown ? p.vy || 0 : 0) * M;   // m/s
       if (!grounded || speed < 0.6) { stride[i] = 0; return; }
       stride[i] += speed * Math.min(dt, 0.1);
       const len = p.size === 'small' ? 0.18 : 0.3;   // metres per step

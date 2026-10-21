@@ -1,4 +1,6 @@
 import { YARD } from './yard.js';
+// what menus and music need to know about the top-down world (its map lives in td/world.js)
+const WORLD_INFO = { id: 'world', name: 'Sweety Island', tagline: 'Go anywhere. Find your powers. Get home.', theme: 'home', music: 'home', tips: ['Walk anywhere. Stand on a power stone together to learn that region\'s powers.', 'Each region\'s heart opens the way to the next.'] };
 // Levels as ASCII, built from sections joined left to right. Every map is H rows.
 //
 //  #  ground            ^  spikes            P / Q  Sugar / Spice start
@@ -475,5 +477,5 @@ export const STORY = {
 for (const c of [...CHAPTERS, ...MINIGAMES]) { c.ents = c.map.ents || []; c.offsets = c.map.offsets || {}; }
 
 export function chapterById(id) {
-  return CHAPTERS.find((c) => c.id === id) || MINIGAMES.find((c) => c.id === id) || (id === 'yard' ? YARD : undefined);
+  return CHAPTERS.find((c) => c.id === id) || MINIGAMES.find((c) => c.id === id) || (id === 'yard' ? YARD : id === 'world' ? WORLD_INFO : undefined);
 }

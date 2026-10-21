@@ -2,6 +2,8 @@
 // (mini-games draw from a seeded sfc32 whose state words live in the run).
 import * as C from './config.js';
 import { chapterById } from './levels.js';
+import { createWorld, step as tdStep, powerOf as tdPowerOf } from './td/sim.js';
+import { WORLD } from './td/world.js';
 
 export const SUGAR = 0;
 export const SPICE = 1;
@@ -12,12 +14,13 @@ const SOLID_BASE = '#Lx%VTK';   // T trampoline, K piano key (the Yard)
 
 export const NO_INPUT = Object.freeze({
   left: false, right: false, down: false, jump: false, ability: false,
-  jumpPressed: false, abilityPressed: false,
+  jumpPressed: false, abilityPressed: false, up: false,
 });
 
 // ---------------------------------------------------------------- setup
 
 export function createRun(chapterId, opts = {}) {
+  if (chapterId === 'world') return createWorld(WORLD, opts);   // the top-down open world
   const ch = typeof chapterId === 'object' ? chapterId : chapterById(chapterId);   // tests pass a map
   if (!ch) throw new Error(`no chapter ${chapterId}`);
   const grid = ch.map.map((row) => row.split(''));
@@ -131,6 +134,7 @@ function tileRaw(grid, w, h, x, y) {
 
 // The power a player has where they stand (the finale changes powers by zone).
 export function powerOf(s, p) {
+  if (s.td) return tdPowerOf(s, p);
   if (s.zones) {
     const cx = p.x + p.w / 2;
     let z = s.zones[0];
@@ -346,6 +350,7 @@ function moveY(s, p, dy) {
 // ---------------------------------------------------------------- step
 
 export function step(s, inputs) {
+  if (s.td) return tdStep(s, inputs);
   s.events.length = 0;
   if (s.complete) return s;
   s.tick++;

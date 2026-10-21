@@ -38,7 +38,8 @@ try {
   check(await until(B, () => window.__sweety.app.online?.status === 'connected') && await until(A, () => window.__sweety.app.online?.status === 'connected'), 'connected');
   // the host has one star already; the guest has none: the Yard both build is the host's
   await A.evaluate(() => { window.__sweety.app.progress.stars = { '55:11': true }; });
-  await A.keyboard.press('Space');   // "The Yard"
+  await A.keyboard.press('KeyS'); await A.waitForTimeout(100);
+  await A.keyboard.press('Space');   // "The Yard", under the island
   check(await until(A, () => window.__sweety.app.run?.chapterId === 'yard') && await until(B, () => window.__sweety.app.run?.chapterId === 'yard'), 'both are in the Yard');
   const totals = await Promise.all([A, B].map((P) => P.evaluate(() => window.__sweety.app.run.starsTotal)));
   check(totals[0] === totals[1] && totals[0] === 12, `both build the host's Yard (stars left ${totals})`);

@@ -1,0 +1,25 @@
+// Every tuning number for the top-down world. Tiles and seconds.
+export const DT = 1 / 60;
+export const FOOT = 0.7;          // a player's footprint, tiles
+export const WALK = 6;
+export const ACCEL = 60;
+export const HOP_TIME = 0.35;     // airborne: clears a one-tile gap at walking speed, never two
+export const GLIDE_SLOW = 0.3;    // a glide makes the hop last ~3x longer
+export const RESPAWN = 0.6;       // you come back where you last stood
+export const LEASH = 14;          // the camera frames you both up to about this far apart
+export const VINE_LEN = 5;
+export const NAIL_SPEED = 18;
+export const NAIL_RANGE = 10;
+export const FLY_TIME = 0.8;      // a springboard flight
+export const DASH_V = 22;
+export const STONE_TIME = 0.8;
+export const RACE_COUNT = 3;
+export const RACE_MAX = 90;
+export const TOY_REST = 2.5;
+export const PUMP_POP = 10;
+export const BALL_R = 0.3;
+export const BALL_MAX = 16;       // under one radius per step: never tunnels a wall
+export const BALL_DRAG = 0.985;
+export const KICK = 9;
+export const FOOTY_WIN = 5;
+export const BENCH_TIME = 1.5;

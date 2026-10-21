@@ -34,8 +34,8 @@ try {
   await page.keyboard.press('KeyW');
   check(await waitFor(() => window.__sweety.app.screen === 'menu', null, 5000), `menu (${await ev(() => window.__sweety.app.screen + ' ' + window.__sweety.app.devices)})`);
   await wait(300);
-  await page.keyboard.press('Space'); await wait(500);   // "Play" is the first item
-  check(await ev(() => window.__sweety.app.screen === 'play' && window.__sweety.app.run.chapterId === 'yard'), 'Play opens the Yard');
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('Space'); await wait(500);   // the Yard is under Play
+  check(await ev(() => window.__sweety.app.screen === 'play' && window.__sweety.app.run.chapterId === 'yard'), 'The Yard (classic) opens the Yard');
   await wait(800); await shot('y00-plaza-start');
   // a first-time Yard: only the Garden is open
   check(await ev(() => window.__sweety.app.run.grid[10][100] === '#'), 'the Workshop gate is shut on a fresh save');

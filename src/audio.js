@@ -107,6 +107,12 @@ const SFX = {
   strike: (who, e) => { tone(80, 0.2, { type: 'triangle', vol: 0.15 }); if (e.bell) [1568, 2093, 1568].forEach((f, i) => tone(f, 0.6, { vol: 0.09, delay: 0.15 + i * 0.12 })); },
   enter: () => [392, 523, 659].forEach((f, i) => tone(f, 0.18, { type: 'triangle', vol: 0.08, delay: i * 0.07 })),
   locked: () => tone(140, 0.15, { type: 'square', vol: 0.06 }),
+  // the island
+  vine: () => [330, 392, 494].forEach((f, i) => tone(f, 0.12, { type: 'triangle', vol: 0.06, delay: i * 0.05 })),
+  shove: () => tone(90, 0.12, { type: 'sawtooth', vol: 0.05 }),
+  sink: () => tone(260, 0.3, { vol: 0.08, slide: -180 }),
+  unlock: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.3, { type: 'triangle', vol: 0.08, delay: i * 0.09 })),
+  heartGot: () => [659, 784, 988, 1319].forEach((f, i) => tone(f, 0.35, { vol: 0.09, delay: i * 0.11 })),
 };
 
 export function playEvents(events) {
