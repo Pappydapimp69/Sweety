@@ -18,7 +18,7 @@ test('the two of you clear the Kitchen: three nests (floor, counter, fridge), th
   assert.ok(top >= 10, 'never stood on the fridge');
 });
 
-test('alone, neither of you gets up onto the counters or the fridge (the island is fair game)', () => {
+test('alone, neither of you gets up onto the counters or the fridge (the island and the spice shelf are fair game)', () => {
   for (const who of [0, 1]) for (const seed of [1, 2, 3]) {
     const s = createRun('kitchen', {});
     const rnd = lcg(seed), p = s.players[who];
@@ -27,10 +27,10 @@ test('alone, neither of you gets up onto the counters or the fridge (the island 
       if (n-- <= 0) { n = 10 + (rnd() * 60 | 0); hold = { up: rnd() < 0.6, down: rnd() < 0.15, left: rnd() < 0.3, right: rnd() < 0.3, ability: rnd() < 0.6 }; }
       const inp = [I, I]; inp[who] = { ...I, ...hold, jumpPressed: rnd() < 0.06, abilityPressed: rnd() < 0.05 };
       step(s, inp);
-      const island = p.x > 19.5 && p.x < 34.5 && p.y > 15.5 && p.y < 23.5;
-      if (p.ground && !island) top = Math.max(top, p.z);
+      const on = p.ground && s.boxes.find((b) => Math.abs(b[5] - p.z) < 0.01 && p.x > b[0] - 0.35 && p.x < b[3] + 0.35 && p.y > b[1] - 0.35 && p.y < b[4] + 0.35);
+      if (on && ['counter', 'fridge', 'stove', 'sink', 'toaster'].includes(on[6])) top = Math.max(top, p.z);
     }
-    assert.ok(top < 3.9, `${who ? 'Spice' : 'Sugar'} alone stood at ${top.toFixed(2)} (seed ${seed})`);
+    assert.ok(top === 0, `${who ? 'Spice' : 'Sugar'} alone stood at ${top.toFixed(2)} (seed ${seed})`);
   }
 });
 

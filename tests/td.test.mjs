@@ -24,7 +24,7 @@ const starAt = (s, x, y) => s.grid[y][x] === '$';
 // ---------------------------------------------------------------- the world
 test('the up stick travels online (a new input bit, the old ones unchanged)', () => {
   const i = { ...I, up: true, left: true, regroup: true };
-  assert.deepEqual(unpackInput(packInput(i)), { ...I, up: true, left: true, regroup: true, right: false, down: false, jump: false, ability: false, jumpPressed: false, abilityPressed: false });
+  assert.deepEqual(unpackInput(packInput(i)), { ...I, up: true, left: true, regroup: true, right: false, down: false, jump: false, ability: false, jumpPressed: false, abilityPressed: false, camL: false, camR: false });
   assert.equal(packInput({ left: true }), 1);   // bit 0 is still left
 });
 

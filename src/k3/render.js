@@ -41,17 +41,17 @@ export function createK3View(canvas) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x2a1f3d);
-  scene.fog = new THREE.Fog(0x2a1f3d, 30, 75);
+  scene.fog = new THREE.Fog(0x2a1f3d, 45, 120);
   const glowTex = glowTexture();
 
   // lights: a warm lamp over the room, cool moonlight through the window, a soft fill
   const hemi = new THREE.HemisphereLight(0xfff0e6, 0x5a3d55, 0.9); scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff1dc, 1.6);
-  sun.position.set(20, 40, 10); sun.target.position.set(32, 0, -22);
+  sun.position.set(40, 50, 5); sun.target.position.set(50, 0, -35);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 35, bottom: -35, near: 1, far: 120 });
+  Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 55, bottom: -55, near: 1, far: 160 }); sun.shadow.mapSize.set(4096, 4096);
   scene.add(sun, sun.target);
-  const lamp = new THREE.PointLight(0xffc078, 60, 40, 1.6); lamp.position.set(32, 13, -22); scene.add(lamp);
+  const lamp = new THREE.PointLight(0xffc078, 60, 40, 1.6); lamp.position.set(50, 14, -35); lamp.distance = 70; scene.add(lamp);
   // a pool of fire lights for the dark
   const fires = Array.from({ length: 6 }, () => { const l = new THREE.PointLight(0xff8c2a, 0, 9, 1.5); scene.add(l); return l; });
 
@@ -70,6 +70,11 @@ export function createK3View(canvas) {
       fridge: new THREE.MeshStandardMaterial({ color: 0xe9f3f7, roughness: 0.3, metalness: 0.2 }),
       stove: new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.3, metalness: 0.4 }),
       stool: new THREE.MeshStandardMaterial({ color: 0x74c0fc, roughness: 0.5 }),
+      shelf: new THREE.MeshStandardMaterial({ map: woodTexture('#a0704c', 'rgba(60,35,20,0.3)'), roughness: 0.75 }),
+      sink: new THREE.MeshStandardMaterial({ color: 0xced4da, roughness: 0.2, metalness: 0.7 }),
+      toaster: new THREE.MeshStandardMaterial({ color: 0xe03131, roughness: 0.25, metalness: 0.4 }),
+      breadbin: new THREE.MeshStandardMaterial({ color: 0x5c940d, roughness: 0.5 }),
+      tin: new THREE.MeshStandardMaterial({ color: 0x1c7ed6, roughness: 0.3, metalness: 0.5 }),
       cereal: new THREE.MeshStandardMaterial({ color: 0xffd43b, roughness: 0.6 }),
       cupboard: new THREE.MeshStandardMaterial({ map: woodTexture('#8c6a50', 'rgba(50,30,20,0.3)'), roughness: 0.8 }),
     };
@@ -112,12 +117,13 @@ export function createK3View(canvas) {
       add(mats[kind] || mats.cupboard);
     }
     // the back walls, low and tiled pink, with a window of night sky
-    for (const [x, y, w, d] of [[32, 44.2, 66, 0.4], [-0.2, 22, 0.4, 46], [64.2, 22, 0.4, 46], [32, -0.2, 66, 0.4]]) {
+    const RW = s.room.w, RD = s.room.d;
+    for (const [x, y, w, d] of [[RW / 2, RD + 0.2, RW + 2, 0.4], [-0.2, RD / 2, 0.4, RD + 2], [RW + 0.2, RD / 2, 0.4, RD + 2], [RW / 2, -0.2, RW + 2, 0.4]]) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, 16, d), mats.wall); m.position.copy(v3(x, y, 8)); m.receiveShadow = true; statics.add(m);
     }
     const win = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), new THREE.MeshBasicMaterial({ color: 0x1c2b5a }));
-    win.position.copy(v3(22, 43.95, 9)); statics.add(win);
-    for (let i = 0; i < 20; i++) { const st = new THREE.Mesh(new THREE.SphereGeometry(0.05, 4, 4), new THREE.MeshBasicMaterial({ color: 0xffffff })); st.position.copy(v3(16.5 + ((i * 37) % 110) / 10, 43.9, 6.5 + ((i * 53) % 50) / 10)); statics.add(st); }
+    win.position.copy(v3(60, s.room.d - 0.05, 9)); statics.add(win);
+    for (let i = 0; i < 20; i++) { const st = new THREE.Mesh(new THREE.SphereGeometry(0.05, 4, 4), new THREE.MeshBasicMaterial({ color: 0xffffff })); st.position.copy(v3(54.5 + ((i * 37) % 110) / 10, s.room.d - 0.1, 6.5 + ((i * 53) % 50) / 10)); statics.add(st); }
   }
 
   // ---------------------------------------------------------------- characters and things

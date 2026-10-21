@@ -9,7 +9,7 @@ export const DELAY = 4;           // ticks of input delay (~67 ms) that hides la
 export const HASH_EVERY = 120;
 export const KEEP = 900;          // input history kept for re-simulating after a resync
 
-const BITS = ['left', 'right', 'down', 'jump', 'ability', 'jumpPressed', 'abilityPressed', 'regroup', 'up'];   // up: the top-down world
+const BITS = ['left', 'right', 'down', 'jump', 'ability', 'jumpPressed', 'abilityPressed', 'regroup', 'up', 'camL', 'camR'];   // up: the top-down world; camL/camR: turning a 3D camera
 export const packInput = (i) => BITS.reduce((m, k, b) => m | (i[k] ? 1 << b : 0), 0);
 export function unpackInput(m) {
   const o = {};

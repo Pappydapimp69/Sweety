@@ -16,7 +16,7 @@ const SOLID_BASE = '#Lx%VTK';   // T trampoline, K piano key (the Yard)
 
 export const NO_INPUT = Object.freeze({
   left: false, right: false, down: false, jump: false, ability: false,
-  jumpPressed: false, abilityPressed: false, up: false,
+  jumpPressed: false, abilityPressed: false, up: false, camL: false, camR: false,
 });
 
 // ---------------------------------------------------------------- setup

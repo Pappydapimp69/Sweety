@@ -5,7 +5,7 @@
 // The way up is the game: the floor and the table are yours from the start (a chair
 // helps, a double jump does too), but the counters and the top of the fridge are only
 // reached by a caramel launch: his syrup under your feet, her spark in it.
-export const ROOM = { w: 64, d: 44, h: 40 };   // walls far higher than any launch
+export const ROOM = { w: 100, d: 70, h: 40 };   // walls far higher than any launch
 
 const boxes = [];
 const box = (x0, y0, z0, x1, y1, z1, kind) => boxes.push([x0, y0, z0, x1, y1, z1, kind]);
@@ -33,6 +33,21 @@ box(54, 34, 0, 64, 44, 10, 'fridge');
 box(12, 4, 0, 14.5, 6.5, 1.2, 'stool');
 box(36, 26, 0, 38.5, 28, 2.2, 'cereal');
 box(8.5, 30, 4, 10.5, 32, 6.2, 'cereal');   // on the west counter: a step toward nothing in particular
+// the east run: a long counter with the sink, along the east wall (top 4)
+box(92, 8, 0, 100, 62, 4, 'counter');
+box(94, 28, 4, 99, 36, 4.1, 'sink');
+box(95, 50, 4, 98.5, 53, 6.5, 'toaster');   // a step up on the sink counter
+// the north side: a tall spice shelf, a staircase of 2 m steps (jump, and again at the top of each)
+box(18, 62, 0, 42, 70, 2, 'shelf');
+box(18, 64, 0, 42, 70, 4, 'shelf');
+box(18, 66, 0, 42, 70, 6, 'shelf');
+box(18, 68, 0, 42, 70, 8, 'shelf');
+// a bread bin and a cookie tin to hop about on, out in the open floor
+box(62, 52, 0, 68, 57, 3, 'breadbin');
+box(72, 30, 0, 75, 33, 1.6, 'tin');
+box(76, 24, 0, 79, 27, 1.6, 'tin');
+box(70, 44, 0, 74, 46, 2.4, 'cereal');
+// a rug in the middle of the new floor (just a floor, but somewhere to be)
 // the pantry: a big open cupboard on the south wall (its floor is the room's floor)
 box(0, 0, 0, 2, 12, 9, 'cupboard');
 box(14, 0, 0, 30, 2, 9, 'cupboard');
@@ -43,16 +58,21 @@ const ents = [];
 const ent = (e) => ents.push(e);
 // start in the middle of the floor
 ent({ type: 'spawn', x: 30, y: 10, z: 0 });
-ent({ type: 'sign', x: 30, y: 12.5, z: 0, text: 'Three ant nests are raiding the anniversary cake. Find them all: one on the floor, one by the stove, one on top of the fridge.' });
+ent({ type: 'sign', x: 30, y: 12.5, z: 0, text: 'Five ant nests are raiding the anniversary cake. Find them all: on the floor, up the spice shelf, by the sink, by the stove, and on top of the fridge.' });
+ent({ type: 'sign', x: 30, y: 60, z: 0, text: 'The spice shelf: each step is too high for one jump. Jump, and jump again.' });
+ent({ type: 'sign', x: 88, y: 40, z: 0, text: 'The sink counter. Too high: syrup and a spark.' });
 ent({ type: 'sign', x: 26, y: 9, z: 0, text: 'Spice: hold your power to spray syrup. It sticks to ants and slows them; it never hurts. Stand still and it aims itself.' });
 ent({ type: 'sign', x: 34, y: 9, z: 0, text: 'Sugar: your sparks bounce off. Light his syrup and it goes off like a firework, and throws whoever stands in it way up.' });
 ent({ type: 'sign', x: 18, y: 25, z: 0, text: 'Too high to jump? Spice: syrup at your feet. Both stand in it. Sugar: light it.' });
-// the nests
-ent({ type: 'nest', x: 10, y: 24, z: 0 });
-ent({ type: 'nest', x: 22, y: 40, z: 4 });
-ent({ type: 'nest', x: 59, y: 39, z: 10 });
+// the nests, in the order the bot takes them (you can take them any way you like)
+ent({ type: 'nest', x: 10, y: 24, z: 0 });      // on the floor by the west counter
+ent({ type: 'nest', x: 30, y: 69, z: 8 });      // on top of the spice shelf
+ent({ type: 'nest', x: 96, y: 44, z: 4 });      // on the sink counter
+ent({ type: 'nest', x: 22, y: 40, z: 4 });      // by the stove
+ent({ type: 'nest', x: 59, y: 39, z: 10 });     // on top of the fridge
 // ants about the place
-for (const [x, y, z, k] of [[40, 26, 0, 'ant'], [12, 20, 0, 'ant'], [28, 30, 0, 'ant'], [27, 19, 4, 'ant'], [15, 40, 4, 'ant'], [36, 40, 4, 'soldier'], [4, 26, 4, 'ant'], [57, 37, 10, 'soldier']]) ent({ type: 'ant', kind: k, x, y, z });
+for (const [x, y, z, k] of [[40, 26, 0, 'ant'], [12, 20, 0, 'ant'], [28, 30, 0, 'ant'], [27, 19, 4, 'ant'], [15, 40, 4, 'ant'], [36, 40, 4, 'soldier'], [4, 26, 4, 'ant'],
+  [57, 37, 10, 'soldier'], [70, 20, 0, 'ant'], [80, 50, 0, 'ant'], [66, 64, 0, 'soldier'], [86, 14, 0, 'ant'], [96, 20, 4, 'ant'], [96, 58, 4, 'soldier'], [25, 67, 6, 'ant'], [35, 69, 8, 'ant'], [64, 54, 3, 'ant']]) ent({ type: 'ant', kind: k, x, y, z });
 // the cake on the table, and the queen who wants it (she comes when the nests are gone)
 ent({ type: 'cake', x: 49, y: 13, z: 3 });
 ent({ type: 'queen', x: 49, y: 9.5, z: 3 });

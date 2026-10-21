@@ -9,7 +9,7 @@ import { WORLD } from './td/world.js';
 import { zoneOf as tdZoneOf } from './td/sim.js';
 import { makeTDCamera, snapTDCamera, drawTD } from './td/render.js';
 import { preloadAI, makeAI, aiInputs, aiReady } from './ai.js';
-import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads, padConnected, initTouch, setTouchLayout, touchSeen } from './input.js';
+import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads, padConnected, initTouch, setTouchLayout, touchSeen, setMode3D } from './input.js';
 import { loadProgress, saveProgress } from './save.js';
 import { unlockAudio, playEvents, sfx, setVolumes } from './audio.js';
 import { playMusic } from './music.js';
@@ -1275,6 +1275,7 @@ function drawPlay() {
     const line = remoteName(i) ? `${NAMES[i]} (online) · ${POWER_NAME[power] || power}`
       : aiOn() && (app.watch || i !== app.active) ? `${NAMES[i]}: the AI is playing${app.watch ? ' (pause to stop watching)' : ` · ${L.switch} to take over`}`
       : soloLocal() && i !== app.active ? `${NAMES[i]}: ${L.switch} to play ${NAMES[i]}`
+      : s.k3 ? `${NAMES[i]}: move ${L.move3d} · jump ${L.jump3d} · camera ${L.cam} · ${POWER_NAME[power] || power} ${L.ability}`
       : `${NAMES[i]}: move ${L.move} · jump ${L.jump} · ${POWER_NAME[power] || power}${power === 'glide' ? '' : ` ${L.ability}`}`;
     ctx.globalAlpha = soloLocal() && i !== app.active ? 0.6 : 1;
     txt(line, i ? W - 16 : 16, H - 22, { align: i ? 'right' : 'left', size: P * 0.72, color: PLAYER_COLORS[i], weight: '600' });
@@ -1454,6 +1455,7 @@ let last = 0;
 function frame(now) {
   const k3on = !!(app.run && app.run.k3) && ['play', 'ending', 'pause', 'complete'].includes(app.screen);
   if (glCanvas && (glCanvas.style.display === 'block') !== k3on) glCanvas.style.display = k3on ? 'block' : 'none';
+  setMode3D(!!(app.run && app.run.k3) && app.screen === 'play');
   const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
   last = now;
   app.t += dt;

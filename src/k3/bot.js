@@ -122,48 +122,56 @@ function launch(s, p, o, x, y, fx, fy, after) {
 
 // the bot's own memory, kept off the sim state (the sim stays exactly what the inputs made it)
 const MEM = new WeakMap();
-function memOf(s) { let m = MEM.get(s); if (!m) { m = { waitDown: [0, 0], table: [false, false] }; MEM.set(s, m); } return m; }
+function memOf(s) { let m = MEM.get(s); if (!m) { m = { waitDown: [0, 0], air: [null, null] }; MEM.set(s, m); } return m; }
 
 export function k3Bot(s, id) {
   const p = s.players[id], o = s.players[1 - id];
   if (!alive(p)) return NONE;
-  // in the air after a launch: steer on, and double-jump at the top to make the fridge
-  if (!p.ground) {
-    const up = p.z > 3.9 && !nestAt(s, 4) && nestAt(s, 10);
-    const toTable = !s.ents.some((e) => e.type === 'nest' && !e.dead) && memOf(s).table[id];
-    if (toTable) return { ...toward(p, 1, 0, 0), jumpPressed: p.jumps < 2 && p.vz < 1 };
-    return { ...NONE, jumpPressed: up && p.jumps < 2 && p.vz < 4 };
-  }
-  const n0 = nestAt(s, 0), n1 = nestAt(s, 4), n2 = nestAt(s, 10), q = queenOf(s);
-  // stranded above your partner (knocked down, or they were): come down to them
   const mem = memOf(s);
-  if (p.z > o.z + 2 && alive(o) && o.ground) { if (++mem.waitDown[id] > 90) return toward(p, o.x - p.x, o.y - p.y, 0); } else mem.waitDown[id] = 0;
-  if (n0) {
-    if (p.z > 0.5) return toward(p, 30 - p.x, 10 - p.y);
-    return fight(s, p, n0);
+  // in the air: hold the way you jumped, and jump again near the top (a launch's double jump makes the fridge)
+  if (!p.ground) {
+    const a = mem.air[id];
+    if (a) return { ...toward(p, a[0], a[1], 0), jumpPressed: p.jumps < 2 && p.vz < 1 };
+    const fridge = p.z > 3.9 && s.ents.find((e) => e.type === 'nest' && !e.dead && e.z === 10) && !s.ents.some((e) => e.type === 'nest' && !e.dead && e.z < 10);
+    return { ...NONE, jumpPressed: !!fridge && p.jumps < 2 && p.vz < 4 };
   }
-  if (n1 || n2) {
-    if (p.z < 3.9) {   // up onto the counter: walk round to the spot below the stove's end
+  mem.air[id] = null;
+  const hop = (dx, dy) => { mem.air[id] = [dx, dy]; return { ...toward(p, dx, dy, 0), jumpPressed: true }; };
+  const down = () => toward(p, 50 - p.x, 28 - p.y, 0);   // off whatever you're on, toward the middle of the room
+  // stranded above your partner (knocked down, or they were): come down to them
+  if (p.z > o.z + 2 && alive(o) && o.ground) { if (++mem.waitDown[id] > 90) return toward(p, o.x - p.x, o.y - p.y, 0); } else mem.waitDown[id] = 0;
+  const n = s.ents.find((e) => e.type === 'nest' && !e.dead);
+  if (n) {
+    if (n.z === 0) return p.z > 0.5 ? down() : fight(s, p, n);
+    if (n.z === 8) {   // the spice shelf: a step at a time, jump and jump again
+      if (p.z > 7.9) return fight(s, p, n);
+      if (p.z > 0.5 && !(p.y > 61.5 && p.x > 17.5 && p.x < 42.5)) return down();
+      const y0 = 62 + Math.round(p.z / 2) * 2, spot = [30 + (id ? 0.8 : -0.8), y0 - 0.7];
+      if (len(spot[0] - p.x, spot[1] - p.y) > 0.4) return p.z < 0.5 ? go(s, p, spot[0], spot[1], 0.3) : toward(p, spot[0] - p.x, spot[1] - p.y, 0.1);
+      return hop(0, 1);
+    }
+    if (n.x > 90) {   // the sink counter
+      if (p.z > 3.9 && p.x > 91) return fight(s, p, n);
+      if (p.z > 0.5) return down();
+      return launch(s, p, o, 88.6, 44, 1, 0);
+    }
+    if (n.z === 4) {   // by the stove
+      if (p.z > 3.9 && p.x < 55 && p.y > 36.5 && p.z < 4.5) return len(n.x - p.x, n.y - p.y) > 6 ? go(s, p, n.x, n.y, 1) : fight(s, p, n);
+      if (p.z > 0.5) return down();
       return launch(s, p, o, 22, 33.6, 0, 1);
     }
-    if (n1 && p.z < 4.5) return len(n1.x - p.x, n1.y - p.y) > 6 ? toward(p, n1.x - p.x, n1.y - p.y) : fight(s, p, n1);
-    if (n2 && p.z < 4.5) {   // along the counter to its end, and up onto the fridge
-      if (threatNear(s, p, 3)) return fight(s, p, null);
-      return launch(s, p, o, 50.6, 40.5, 1, 0);
-    }
-    if (n2) return len(n2.x - p.x, n2.y - p.y) > 6 ? toward(p, n2.x - p.x, n2.y - p.y) : fight(s, p, n2);
+    // the fridge: up onto the counter, along to its end, then up again
+    if (p.z > 9.9) return len(n.x - p.x, n.y - p.y) > 6 ? toward(p, n.x - p.x, n.y - p.y) : fight(s, p, n);
+    if (p.z > 3.9 && p.x < 55 && p.y > 36.5) { if (threatNear(s, p, 3)) return fight(s, p, null); return launch(s, p, o, 50.6, 40.5, 1, 0); }
+    if (p.z > 0.5) return down();
+    return launch(s, p, o, 22, 33.6, 0, 1);
   }
+  const q = queenOf(s);
   if (!q || q.dead) return NONE;
-  if (p.z > 3.5) {   // off the counter or the fridge, down to the floor
-    if (p.z > 9) return toward(p, 0, -1);
-    return toward(p, 34 - p.x, 30 - p.y);
-  }
-  if (p.z < 2.9) {   // onto the table: up the chair, then a jump
-    // from the floor between the chair and the table: jump, and again at the top
-    memOf(s).table[id] = false;
+  if (p.z > 3.5) return p.z > 9 ? toward(p, 0, -1) : down();
+  if (p.z < 2.9) {   // onto the table: from the floor between the chair and the table, jump and jump again
     if (len(41.5 - p.x, 11 - p.y) > 0.5) return go(s, p, 41.5, 11, 0.2);
-    memOf(s).table[id] = true;
-    return { ...NONE, jumpPressed: true };
+    return hop(1, 0);
   }
   return fight(s, p, q);
 }

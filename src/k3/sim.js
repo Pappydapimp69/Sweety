@@ -115,6 +115,12 @@ function updatePlayer(s, p, inp) {
     }
     return;
   }
+  // turning your camera (a fixed small angle a tick, as numbers: no trig in the sim)
+  if (inp.camL || inp.camR) {
+    const c = 0.9980261, sn = inp.camL ? 0.0627905 : -0.0627905;   // 3.6 degrees
+    const nx = p.cx * c - p.cy * sn, ny = p.cx * sn + p.cy * c, l = len2(nx, ny) || 1;
+    p.cx = nx / l; p.cy = ny / l;
+  }
   // the stick, relative to your camera; the camera swings round behind where you go
   const fwd = (inp.up ? 1 : 0) - (inp.down ? 1 : 0), side = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
   let wx = p.cx * fwd + p.cy * side, wy = p.cy * fwd - p.cx * side;
@@ -194,7 +200,7 @@ function fire(s, p, pressed) {
       dx = ex / d; dy = ey / d; dz = Math.max(-0.6, Math.min(0.8, (t.z + 0.4 - oz + 0.5 * K.SYRUP_G * tt * tt) / (K.SYRUP_V * tt)));
     }
     const l = len3(dx, dy, dz);
-    s.shots.push({ kind: 'syrup', who: p.id, x: ox, y: oy, z: oz, vx: (dx / l) * K.SYRUP_V, vy: (dy / l) * K.SYRUP_V, vz: (dz / l) * K.SYRUP_V, dist: 0 });
+    s.shots.push({ kind: 'syrup', who: p.id, x: ox, y: oy, z: oz, vx: (dx / l) * K.SYRUP_V, vy: (dy / l) * K.SYRUP_V, vz: (dz / l) * K.SYRUP_V, dist: 0, aimed: !!t });
     s.events.push({ type: 'syrup', who: p.id, x: p.x, y: p.y, z: p.z, first: pressed });
   } else {
     p.cool = C.SPARK_RATE;
@@ -260,10 +266,10 @@ function hitSomething(s, b) {
     else s.events.push({ type: 'tink', x: e.x, y: e.y, z: e.z });
     return true;
   }
-  if (b.kind === 'syrup') {   // his syrup on her: a puddle at her feet
+  if (b.kind === 'syrup' && !b.aimed) {   // his syrup on her (when he isn't aiming at an ant): a puddle at her feet
     const o = s.players[1 - b.who];
     if (alive(o) && len3(o.x - b.x, o.y - b.y, o.z + 0.5 - b.z) < K.R + 0.3) { addPuddle(s, o.x, o.y, supportAt(s, o.x, o.y, 0.05, o.z + 0.05)); return true; }
-  } else {
+  } else if (b.kind === 'spark') {
     const pd = s.puddles.find((q) => !q.burn && Math.abs(q.z - b.z) < 0.7 && len2(q.x - b.x, q.y - b.y) < K.PUDDLE_R * 0.9);
     if (pd) { ignitePuddle(s, pd, 0); return true; }
   }
