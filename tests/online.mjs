@@ -45,7 +45,8 @@ try {
   check(joined, `guest joined by link (code ${code})`);
   check(await B.evaluate(() => window.__sweety.app.online.slot) === 1, 'guest plays Spice');
   await shot(B, '31-online-guest');
-  // host picks Chapters (under The Yard) -> chapter 1
+  // host picks Chapters (under the island and the Yard) -> chapter 1
+  await A.keyboard.press('KeyS'); await A.waitForTimeout(100);
   await A.keyboard.press('KeyS'); await A.waitForTimeout(100);
   await A.keyboard.press('Space'); await A.waitForTimeout(300);
   check(await A.evaluate(() => window.__sweety.app.screen) === 'chapters', 'host picks from the chapter list');

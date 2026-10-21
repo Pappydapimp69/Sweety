@@ -37,7 +37,7 @@ try {
   check(await screen() === 'menu', 'A goes to the menu');
   await tap(0, 13); await tap(0, 12);
   check(await page.evaluate(() => window.__sweety.app.menuIndex) === 0, 'd-pad down then up');
-  await tap(1, 13); await tap(1, 0);   // Chapters sits under Play
+  await tap(1, 13); await tap(1, 13); await tap(1, 0);   // Chapters sits under Play and the Yard
   check(await screen() === 'chapters', 'A on Chapters');
   await tap(1, 1);
   check(await screen() === 'menu', 'B goes back');

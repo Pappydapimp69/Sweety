@@ -41,7 +41,7 @@ try {
   check(await screen() === 'title', 'B goes back');
   await tap(L.a); await tap(L.up);
   check(await page.evaluate(() => window.__sweety.app.menuIndex) === 0, '▲ moves back up');
-  await tap(L.down); await tap(L.a);   // Chapters sits under Play
+  await tap(L.down); await tap(L.down); await tap(L.a);   // Chapters sits under Play and the Yard
   check(await screen() === 'chapters', 'A on Chapters');
   await tap(L.a);
   for (let i = 0; i < 4 && await screen() === 'story'; i++) await tap(L.a);

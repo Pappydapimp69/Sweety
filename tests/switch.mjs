@@ -75,7 +75,7 @@ try {
   await page.keyboard.press('KeyW');
   check(await until(() => window.__sweety.app.screen === 'menu'), 'alone: jump again goes to the menu');
   await page.keyboard.press('Space');
-  check(await until(() => window.__sweety.app.screen === 'play' && window.__sweety.app.run?.chapterId === 'yard'), 'Play opens the Yard with one player');
+  check(await until(() => window.__sweety.app.screen === 'play' && window.__sweety.app.run?.chapterId === 'world'), 'Play opens the island with one player');
   await app(() => window.__sweety.start('garden'));
   await until(() => window.__sweety.app.run.chapterId === 'garden' && window.__sweety.app.run.tick > 40 && window.__sweety.app.run.players.every((p) => p.onGround));
   const s0 = await app(() => window.__sweety.app.run.players.map((p) => p.x));

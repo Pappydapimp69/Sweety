@@ -5,6 +5,9 @@ import { CHAPTERS, MINIGAMES, STORY, chapterById } from './levels.js';
 import { createRun, step, NAMES, powerOf, NO_INPUT } from './sim.js';
 import { drawWorld, drawCharacter, snapCamera, makeCamera, textPx, PLAYER_COLORS, heart, zoneAt, drawStar } from './render.js';
 import { YARD } from './yard.js';
+import { WORLD } from './td/world.js';
+import { zoneOf as tdZoneOf } from './td/sim.js';
+import { makeTDCamera, snapTDCamera, drawTD } from './td/render.js';
 import { preloadAI, makeAI, aiInputs, aiReady } from './ai.js';
 import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads, padConnected, initTouch, setTouchLayout, touchSeen } from './input.js';
 import { loadProgress, saveProgress } from './save.js';
@@ -18,7 +21,7 @@ const ctx = canvas.getContext('2d');
 let W = 0, H = 0;
 
 export const POWER_NAME = {
-  none: 'wave', pin: 'pin', slam: 'slam (in the air)', lantern: 'shine (hold)', size: 'shrink / grow',
+  none: 'wave', vine: 'grow a vine', shove: 'shove', nail: 'nail gun', hammer: 'hammer', pin: 'pin', slam: 'slam (in the air)', lantern: 'shine (hold)', size: 'shrink / grow',
   swap: 'swap places', flip: 'flip gravity', gust: 'gust', glide: 'glide: hold jump', freeze: 'stop time (hold)', dash: 'dash',
 };
 const SHAKE = { thud: 0.25, launch: 0.2, crate: 0.3, glass: 0.25, die: 0.3, boom: 0.6, bonk: 0.2, flood: 0.3 };
@@ -122,16 +125,27 @@ const YARD_STARS = YARD.map.join('').split('$').length - 1;
 function yardOpts(at = null) {
   return { unlocked: app.progress.unlocked, stars: Object.keys(app.progress.stars), at };
 }
+// The island is built from your progress too (online, the host's).
+const WORLD_STARS = WORLD.map.join('').split('$').length - 1;
+function worldOpts() { const w = app.progress.world; return { unlocked: [...w.unlocked], hearts: [...w.hearts], stars: [...w.stars] }; }
+const mkCam = (s) => (s.td ? makeTDCamera(s) : makeCamera(s));
+const snapCam = (cam, s, instant) => (s.td ? snapTDCamera(cam, s, W, H, instant) : snapCamera(cam, s, W, H, instant));
+function enterWorld() {
+  app.fromYard = null;
+  if (app.online) { if (app.online.role === 'host') onlineStart('world'); return; }
+  startRun('world', worldOpts());
+}
 function startRun(id, extra = null) {
   const ch = chapterById(id);
   const gentle = app.online ? !!app.online.gentle : S().gentle;
   const opts = { gentle };
   if (id === 'yard') Object.assign(opts, extra || (app.online && app.online.yardOpts) || yardOpts(app.yardAt));
+  if (id === 'world') Object.assign(opts, extra || (app.online && app.online.worldOpts) || worldOpts());
   app.run = createRun(id, opts);
   app.zone = null; app.pendingEnter = null; app.ai = null;
   if (app.online) startLockstep();
-  app.cam = makeCamera(app.run);
-  snapCamera(app.cam, app.run, W, H, true);
+  app.cam = mkCam(app.run);
+  snapCam(app.cam, app.run, true);
   app.fx = []; app.bubbles = []; app.shake = 0; acc = 0; app.powers = null; app.toast = null;
   app.banner = 6;
   go('play');
@@ -169,9 +183,10 @@ function onlineStart(id, restart = false, at = null) {   // host picks; both mac
   o.gentle = S().gentle;
   o.ls = null;   // the last round's lockstep must not swallow this round's inputs
   o.yardOpts = id === 'yard' ? (restart && o.yardOpts ? o.yardOpts : yardOpts(at)) : o.yardOpts;
+  o.worldOpts = id === 'world' ? (restart && o.worldOpts ? o.worldOpts : worldOpts()) : o.worldOpts;
   if (id !== 'yard' && !restart) { app.fromYard = app.fromYard || null; }
-  net.send({ t: 'start', id, gentle: o.gentle, round: o.round, restart, yard: id === 'yard' ? o.yardOpts : null, from: app.fromYard });
-  if (restart || id === 'yard') startRun(id); else beginChapter(id);
+  net.send({ t: 'start', id, gentle: o.gentle, round: o.round, restart, yard: id === 'yard' ? o.yardOpts : null, world: id === 'world' ? o.worldOpts : null, from: app.fromYard });
+  if (restart || id === 'yard' || id === 'world') startRun(id); else beginChapter(id);
 }
 
 function onNetData(m) {
@@ -187,8 +202,9 @@ function onNetData(m) {
   } else if (m.t === 'start' && o.role === 'guest') {
     o.round = m.round; o.gentle = m.gentle; o.ls = null;
     if (m.yard) o.yardOpts = m.yard;
+    if (m.world) o.worldOpts = m.world;
     app.fromYard = m.from || null;
-    if (m.restart || m.id === 'yard') startRun(m.id); else beginChapter(m.id);
+    if (m.restart || m.id === 'yard' || m.id === 'world') startRun(m.id); else beginChapter(m.id);
   } else if (m.t === 'pause') o.partnerPaused = true;
   else if (m.t === 'resume') o.partnerPaused = false;
   else if (m.t === 'credits' && o.role === 'guest') go('credits');
@@ -310,7 +326,8 @@ function updateTitle() {
 const twoHere = () => (app.devices[0] && app.devices[1]) || (app.online && app.online.status === 'connected') || soloLocal();
 const needTwo = () => say('Two players needed: join a second controller or keyboard half on the title screen, or play online.');
 const MAIN_MENU = [
-  { label: 'Play', go: () => { if (!twoHere()) return needTwo(); enterYard(app.yardAt); } },
+  { label: 'Play', go: () => { if (!twoHere()) return needTwo(); enterWorld(); } },
+  { label: 'The Yard (classic)', go: () => { if (!twoHere()) return needTwo(); enterYard(app.yardAt); } },
   { label: 'Chapters', go: () => { if (!twoHere()) return needTwo(); app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); } },
   { label: 'Mini-games', go: () => { if (!twoHere()) return needTwo(); go('minis'); } },
   { label: 'Play online', go: () => { app.onlineIndex = 0; go('online'); } },
@@ -373,13 +390,14 @@ function updateOnline() {
   }
   if (o.status === 'connected') {
     if (o.role === 'host') {
-      const n = 4;
+      const n = 5;
       app.onlineIndex = move(app.onlineIndex, m.down - m.up, n);
       if (m.ok) {
         sfx('confirm');
-        if (app.onlineIndex === 0) enterYard(null);
-        else if (app.onlineIndex === 1) { app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); }
-        else if (app.onlineIndex === 2) go('minis');
+        if (app.onlineIndex === 0) enterWorld();
+        else if (app.onlineIndex === 1) enterYard(null);
+        else if (app.onlineIndex === 2) { app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); }
+        else if (app.onlineIndex === 3) go('minis');
         else leaveOnline();
       }
     }
@@ -439,7 +457,7 @@ function updateStory() {
 // "Back to checkpoint" brings BOTH of you back to the last flag: the way out of
 // any spot where one of you is stranded. It travels as an input, so online works too.
 function pauseItems() {
-  const inYard = app.run && app.run.yard;
+  const inYard = app.run && (app.run.yard || app.run.td);
   const back = app.run && app.run.mode === 'chapter' ? [inYard ? 'Back to the Plaza (both)' : 'Back to checkpoint (both)'] : [];
   const restart = inYard ? [] : [app.online ? 'Restart (both of you)' : 'Restart'];
   const yard = app.fromYard && !inYard ? ['Back to the Yard'] : [];
@@ -482,7 +500,7 @@ function updatePause() {
     else if (item === 'Stop watching') { app.watch = false; resume(); }
     else if (item === 'Restart') startRun(app.run.chapterId);
     else if (item === 'Settings') { app.settingsBack = 'pause'; go('settings'); }
-    else { const id = app.run.chapterId; app.run = null; app.fromYard = null; go(id === 'yard' ? 'menu' : CHAPTERS.some((c) => c.id === id) ? 'chapters' : 'minis'); }
+    else { const id = app.run.chapterId; app.run = null; app.fromYard = null; go(id === 'yard' || id === 'world' ? 'menu' : CHAPTERS.some((c) => c.id === id) ? 'chapters' : 'minis'); }
   }
 }
 
@@ -620,8 +638,27 @@ function yardEvent(e) {
     case 'enter': app.pendingEnter = e.id; break;
     case 'locked': say(e.id === 'home' ? 'Home opens when you have finished the Clocktower.' : 'Finish the chapter before this one to open it.'); break;
     case 'star': {
+      if (app.run && app.run.td) {
+        if (!P.world.stars.includes(e.key)) { P.world.stars.push(e.key); save(); }
+        say(`★ A star! ${P.world.stars.length} of ${WORLD_STARS}`);
+        break;
+      }
       if (!P.stars[e.key]) { P.stars[e.key] = true; save(); }
       say(`★ A star! ${Object.keys(P.stars).length} of ${YARD_STARS}`);
+      break;
+    }
+    case 'unlock': {   // a power stone: new powers for this region
+      if (!P.world.unlocked.includes(e.region)) { P.world.unlocked.push(e.region); P.world.unlocked.sort((a, b) => a - b); save(); }
+      const r = WORLD.regions[e.region];
+      app.toast = { title: `New powers! ${r.name}`, lines: [[0, `Sugar: ${POWER_NAME[r.sugar] || r.sugar}${remoteName(0) ? '' : ` (${labelsFor(devOf(0)).ability})`}`], [1, `Spice: ${POWER_NAME[r.spice] || r.spice}${remoteName(1) ? '' : ` (${labelsFor(devOf(1)).ability})`}`]], life: 5 };
+      app.powers = app.run.players.map((p) => powerOf(app.run, p));   // the card says it; no second toast
+      sfx('confirm');
+      break;
+    }
+    case 'heartGot': {
+      if (!P.world.hearts.includes(e.region)) { P.world.hearts.push(e.region); P.world.hearts.sort((a, b) => a - b); save(); }
+      const next = WORLD.regions[e.region + 1];
+      say(`♥ ${WORLD.regions[e.region].name}: done!${next ? ` The way to ${next.name} is open.` : ''}`);
       break;
     }
     case 'raceEnd': {
@@ -651,7 +688,7 @@ function yardEvent(e) {
 function spawnFx(events) {
   for (const e of events) {
     let x = e.x, y = e.y;
-    if (x === undefined && e.who !== undefined && e.who >= 0) { const p = app.run.players[e.who]; x = p.x + p.w / 2; y = p.y + p.h / 2; }
+    if (x === undefined && e.who !== undefined && e.who >= 0) { const p = app.run.players[e.who]; x = p.x + (p.w ?? 0) / 2; y = p.y + (p.h ?? 0) / 2; }
     if (x === undefined) continue;
     const add = (n, kind, color, speed = 6, life = 0.7) => {
       for (let i = 0; i < n; i++) {
@@ -679,6 +716,11 @@ function spawnFx(events) {
       case 'pop': add(18, 'dot', PLAYER_COLORS[e.who], 9); break;
       case 'goal': add(16, 'dot', PLAYER_COLORS[e.who], 8); break;
       case 'cuddle': add(10, 'heart', '#ff4d6d', 3, 1.2); break;
+      case 'unlock': add(24, 'dot', '#ffd43b', 8, 1); app.fx.push({ x, y, vx: 0, vy: 0, life: 1, max: 1, kind: 'ring', color: '#ffd43b' }); break;
+      case 'heartGot': add(16, 'heart', '#ff4d6d', 6, 1.2); break;
+      case 'vine': add(6, 'dot', '#69db7c', 3); break;
+      case 'sink': add(10, 'dot', '#74c0fc', 5); break;
+      case 'shove': add(4, 'dot', '#c8873e', 2, 0.3); break;
       case 'boing': add(5, 'dot', '#ff8fab', 3, 0.3); break;
       case 'note': add(1, 'dot', '#ffffff', 1.5, 0.5); break;
       case 'strike': if (e.bell) add(16, 'dot', '#ffd43b', 7); break;
@@ -702,16 +744,17 @@ function watchPowers(dt) {
 
 // The Yard: walking into a district says its name and plays its music.
 const DISTRICT_MUSIC = { 'The Plaza': 'home', 'The Garden': 'garden', 'The Workshop': 'toolbox', 'The Night Meadow': 'night', 'The Attic': 'attic', 'The Rooftops': 'sky', 'The Clock Yard': 'clock' };
+const REGION_MUSIC = { plaza: 'home', meadow: 'garden', workshop: 'toolbox', night: 'night', attic: 'attic', sky: 'sky', clock: 'clock', home: 'home' };
 function watchZone(dt) {
   if (app.zoneBanner) app.zoneBanner.life -= dt;
   const s = app.run;
-  if (!s || !s.yard) return;
-  const mid = (s.players[0].x + s.players[1].x) / 2 + 0.5;
-  const z = zoneAt(s, mid);
+  if (!s || !(s.yard || s.td)) return;
+  const mid = (s.players[0].x + s.players[1].x) / 2 + (s.td ? 0 : 0.5);
+  const z = s.td ? tdZoneOf(s, mid, (s.players[0].y + s.players[1].y) / 2) : zoneAt(s, mid);
   if (app.zone !== z.name) {
     if (app.zone) app.zoneBanner = { name: z.name, life: 3 };
     app.zone = z.name;
-    playMusic(DISTRICT_MUSIC[z.name] || 'home');
+    playMusic(s.td ? REGION_MUSIC[z.id] || 'home' : DISTRICT_MUSIC[z.name] || 'home');
   }
 }
 
@@ -1050,7 +1093,7 @@ function drawOnline() {
   // connected
   couple(W / 2, H * 0.42, Math.min(110, H * 0.14));
   txt(`Connected! You are ${NAMES[o.slot]}.`, W / 2, H * 0.5, { size: P * 1.3, color: '#3c096c', shadow: false });
-  if (o.role === 'host') menuList(['The Yard', 'Chapters', 'Mini-games', 'Leave'], W / 2, H * 0.6, app.onlineIndex, P);
+  if (o.role === 'host') menuList(['Sweety Island', 'The Yard', 'Chapters', 'Mini-games', 'Leave'], W / 2, H * 0.6, app.onlineIndex, P);
   else txt(`${NAMES[1 - o.slot]} is choosing what to play…`, W / 2, H * 0.62, { size: P, color: '#5a189a', shadow: false });
   hint(o.role === 'host' ? `move: ${L.nav}  ·  ok: ${L.ok}  ·  back: ${L.back} (leave)` : `back: ${L.back} (leave)`);
 }
@@ -1101,26 +1144,33 @@ function drawPlay() {
   const s = app.run, ch = chapterById(s.chapterId);
   ctx.save();
   if (app.shake > 0) ctx.translate((Math.random() - 0.5) * app.shake * 22, (Math.random() - 0.5) * app.shake * 22);
-  const zone = s.zones && s.zones[0].theme ? zoneAt(s, app.cam.x) : null;
-  drawWorld(ctx, s, app.cam, W, H, app.fx, zone ? zone.theme : ch.theme, app.t);
-  drawSigns(s);
-  drawBubbles(s);
-  if (soloLocal() && s.mode === 'chapter') drawActiveMarker(s);
+  if (s.td) {
+    drawTD(ctx, s, app.cam, W, H, app.fx, app.t);
+    drawTDSigns(s);
+    drawBubbles(s);
+    if (soloLocal()) drawActiveMarker(s);
+  } else {
+    const zone = s.zones && s.zones[0].theme ? zoneAt(s, app.cam.x) : null;
+    drawWorld(ctx, s, app.cam, W, H, app.fx, zone ? zone.theme : ch.theme, app.t);
+    drawSigns(s);
+    drawBubbles(s);
+    if (soloLocal() && s.mode === 'chapter') drawActiveMarker(s);
+  }
   ctx.restore();
   const P = textPx(H);
   // the HUD sits on soft dark fades rather than boxes
   const fade = ctx.createLinearGradient(0, 0, 0, P * 3.2);
   fade.addColorStop(0, 'rgba(20,10,35,0.35)'); fade.addColorStop(1, 'rgba(20,10,35,0)');
   ctx.fillStyle = fade; ctx.fillRect(0, 0, W, P * 3.2);
-  txt(s.yard && app.zone ? app.zone : ch.name, 16, 24, { align: 'left', size: P });
+  txt((s.yard || s.td) && app.zone ? app.zone : ch.name, 16, 24, { align: 'left', size: P });
   if (s.mode !== 'chapter') {
     txt(`${s.score[0]}`, W / 2 - 60, 40, { size: P * 2.2, color: PLAYER_COLORS[0] });
     txt('vs', W / 2, 40, { size: P });
     txt(`${s.score[1]}`, W / 2 + 60, 40, { size: P * 2.2, color: PLAYER_COLORS[1] });
     if (s.mode === 'rain') txt(`${Math.max(0, Math.ceil(s.timeLeft))}s`, W / 2, 40 + P * 1.8, { size: P });
     if (s.mode === 'potato') txt(`round ${s.round}`, W / 2, 40 + P * 1.8, { size: P * 0.8 });
-  } else if (s.yard) {
-    const label = `${Object.keys(app.progress.stars).length} / ${YARD_STARS}`;
+  } else if (s.yard || s.td) {
+    const label = s.td ? `${app.progress.world.stars.length} / ${WORLD_STARS}` : `${Object.keys(app.progress.stars).length} / ${YARD_STARS}`;
     ctx.font = `700 ${P}px ${FONT}`;
     const tw = ctx.measureText(label).width, pw = tw + P * 2.6;
     panel(W - 12 - pw, 24 - P * 0.85, pw, P * 1.7, 'rgba(28,20,52,0.55)', P * 0.85);
@@ -1177,8 +1227,10 @@ function drawPlay() {
   } else if (app.toast && app.toast.life > 0) {
     ctx.globalAlpha = Math.min(1, app.toast.life);
     const bw = Math.min(W - 32, 640);
-    panel((W - bw) / 2, top, bw, P * 2.4 * app.toast.lines.length + P * 0.6);
-    app.toast.lines.forEach(([who, text], i) => txt(text, W / 2, top + P * (1.5 + i * 2.4), { size: P, color: PLAYER_COLORS[who] }));
+    const t0 = app.toast.title ? P * 2.4 : 0;
+    panel((W - bw) / 2, top, bw, t0 + P * 2.4 * app.toast.lines.length + P * 0.6);
+    if (app.toast.title) txt(app.toast.title, W / 2, top + P * 1.5, { size: P * 1.3, color: '#fff3bf' });
+    app.toast.lines.forEach(([who, text], i) => txt(text, W / 2, top + t0 + P * (1.5 + i * 2.4), { size: P, color: PLAYER_COLORS[who] }));
     ctx.globalAlpha = 1;
   }
 }
@@ -1189,8 +1241,8 @@ function drawActiveMarker(s) {
   const p = s.players[app.active];
   if (!p || p.dead) return;
   const k = app.cam.scale;
-  const x = W / 2 + (p.x + p.w / 2 - app.cam.x) * k;
-  const top = (p.grav < 0 ? p.y + p.h + 0.9 : p.y - 0.5);
+  const x = W / 2 + (p.x + (p.w ?? 0) / 2 - app.cam.x) * k;
+  const top = s.td ? p.y - 1.1 : (p.grav < 0 ? p.y + p.h + 0.9 : p.y - 0.5);
   const y = H / 2 + (top - app.cam.y) * k + Math.sin(app.t * 6) * 4 * (p.grav < 0 ? -1 : 1);
   const r = Math.max(7, k * 0.32), dir = p.grav < 0 ? -1 : 1;
   ctx.fillStyle = PLAYER_COLORS[app.active]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
@@ -1215,6 +1267,21 @@ function drawSigns(s) {
   }
 }
 
+// the island's signs: read out at the bottom when either of you stands near one
+function drawTDSigns(s) {
+  const P = textPx(H) * 0.85;
+  const e = s.ents.find((q) => q.type === 'sign' && s.players.some((p) => !p.dead && Math.hypot(p.x - q.x - 0.5, p.y - q.y - 0.5) < 2.6));
+  if (!e) return;
+  const ab = (i) => (remoteName(i) ? 'their power button' : labelsFor(devOf(i)).ability);
+  const text = e.text.replace(/Sugar: /, `Sugar (${ab(0)}): `).replace(/Spice: /, `Spice (${ab(1)}): `);
+  const lines = wrapLines(text, Math.min(620, W - 60), P, '600');
+  ctx.font = `600 ${P}px system-ui, sans-serif`;
+  const bw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 32, bh = lines.length * P * 1.3 + 18;
+  const bx = (W - bw) / 2, by = H - 34 - P * 1.6 - bh;
+  panel(bx, by, bw, bh, 'rgba(255, 248, 225, 0.96)', 10);
+  lines.forEach((l, i) => txt(l, bx + 16, by + 9 + P * 0.65 + i * P * 1.3, { size: P, color: '#5d4037', align: 'left', shadow: false, weight: '600' }));
+}
+
 function drawBubbles(s) {
   const k = app.cam.scale, P = textPx(H) * 0.85;
   const shown = [false, false];
@@ -1222,7 +1289,7 @@ function drawBubbles(s) {
     if (b.delay > 0 || b.who < 0 || shown[b.who]) continue;
     shown[b.who] = true;
     const p = s.players[b.who];
-    const px = W / 2 + (p.x + p.w / 2 - app.cam.x) * k, py = H / 2 + (p.y - app.cam.y) * k - k * 0.5;
+    const px = W / 2 + (p.x + (p.w ?? 0) / 2 - app.cam.x) * k, py = H / 2 + (p.y - app.cam.y) * k - k * (s.td ? 0.9 : 0.5);
     const lines = wrapLines(b.text, 260, P, '600');
     ctx.font = `600 ${P}px system-ui, sans-serif`;
     const bw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 24, bh = lines.length * P * 1.3 + 14;
@@ -1308,11 +1375,11 @@ function frame(now) {
       updateFx(dt);
       watchPowers(dt);
       watchZone(dt);
-      if (app.run) snapCamera(app.cam, app.run, W, H);
+      if (app.run) snapCam(app.cam, app.run);
       if (app.screen === 'play' || app.screen === 'ending') drawPlay();
       break;
     case 'ending':
-      updateFx(dt); snapCamera(app.cam, app.run, W, H); drawPlay();
+      updateFx(dt); snapCam(app.cam, app.run); drawPlay();
       app.ending -= dt;
       if (app.ending <= 0) finishRun();
       break;
