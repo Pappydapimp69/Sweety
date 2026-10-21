@@ -1,3 +1,5 @@
+import { startSoundscape, worldSound } from './soundscape.js';
+
 // Tiny synthesized sound effects. Fire-and-forget: never await resume() (some
 // browsers leave it pending forever), cap concurrent voices.
 let ctx = null;
@@ -14,6 +16,7 @@ export function unlockAudio() {
       sfxBus = ctx.createGain(); sfxBus.gain.value = vol.sfx; sfxBus.connect(ctx.destination);
       musicBus = ctx.createGain(); musicBus.gain.value = vol.music; musicBus.connect(ctx.destination);
       for (const f of unlockHooks) f();
+      startSoundscape(ctx, sfxBus);
     }
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   } catch { ctx = null; }
@@ -107,6 +110,6 @@ const SFX = {
 };
 
 export function playEvents(events) {
-  for (const e of events) if (SFX[e.type]) SFX[e.type](e.who, e);
+  for (const e of events) if (SFX[e.type] && !worldSound(e)) SFX[e.type](e.who, e);
 }
 export const sfx = (name) => SFX[name] && SFX[name]();

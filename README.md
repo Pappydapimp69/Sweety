@@ -129,5 +129,7 @@ directly.
 - `node tests/online.mjs [dir]`: two browsers play a chapter online through the real broker.
 - `node tests/touch.mjs [dir]`: real multi-touch events. Hold ▶ with one finger and tap A with another.
 - `node tests/yard.mjs [dir]` and `node tests/online-yard.mjs [dir]`: the Yard in a browser (every district, a star saved, in a door and back out) and online (both through a door together and back).
+- `node tests/sound.mjs`: the sound engine in Chromium: it loads, goes through the Sounds volume, footsteps and hits are audible without clipping.
 - `node tests/switch.mjs [dir]`: the splash (`?splash`), trading characters on the title and in a level, and solo switching.
 - Design notes: `docs/blueprint.md`.
+- Sound: `src/audio.js` keeps the cartoon tones; `src/soundscape.js` adds the world's own sound (footsteps on each place's floor, wood, stone, metal, glass and the bell struck where they happen, water, and each place's room echo) from the procedural engine vendored in `src/vendor/sound-engine` (a copy of the Sound-engine repo's `src`; copy it again to update). Without AudioWorklet the tones play alone.
