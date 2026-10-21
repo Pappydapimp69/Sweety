@@ -422,6 +422,10 @@ export const BONK = MINIGAMES[0];
 // What Sugar and Spice say. Story beats open and close each chapter; `talk`
 // entities in the maps trigger the lines in between.
 export const STORY = {
+  kitchen: {
+    intro: [['Sugar', 'We fell out of the anniversary box!'], ['Spice', 'Onto the kitchen counter. At night.'], ['Sugar', 'And the ants are after the anniversary cake.'], ['Spice', 'Not on our anniversary. Grab a gun.']],
+    outro: [['Sugar', 'The cake is safe!'], ['Spice', 'You light up everything I touch.'], ['Sugar', 'That was terrible.'], ['Spice', 'You smiled, though.']],
+  },
   garden: {
     intro: [['Sugar', 'We fell out of the box!'], ['Spice', 'Our anniversary is tomorrow morning.'], ['Sugar', 'Then we walk home. Together.']],
     outro: [['Spice', 'That was nice. Doors are easier with two.'], ['Sugar', 'Everything is.']],
@@ -476,6 +480,16 @@ export const STORY = {
 
 for (const c of [...CHAPTERS, ...MINIGAMES]) { c.ents = c.map.ents || []; c.offsets = c.map.offsets || {}; }
 
+// The new chapters: each its own level, its own genre, its own powers.
+export const KITCHEN_INFO = {
+  id: 'kitchen', name: 'Chapter 1: The Kitchen', tagline: 'He makes it sticky. She makes it go bang.',
+  powers: Z('spark', 'syrup'), theme: 'kitchen', music: 'toolbox',
+  tips: [
+    'Spice: hold your power to spray syrup. Stand still and it aims itself.',
+    'Sugar: your sparks light syrup. Lit syrup goes off, and throws whoever stands in it.',
+  ],
+};
 export function chapterById(id) {
+  if (id === 'kitchen') return KITCHEN_INFO;
   return CHAPTERS.find((c) => c.id === id) || MINIGAMES.find((c) => c.id === id) || (id === 'yard' ? YARD : id === 'world' ? WORLD_INFO : undefined);
 }

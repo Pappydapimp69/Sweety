@@ -4,6 +4,8 @@ import * as C from './config.js';
 import { chapterById } from './levels.js';
 import { createWorld, step as tdStep, powerOf as tdPowerOf } from './td/sim.js';
 import { WORLD } from './td/world.js';
+import { createKitchen, step as kitchenStep } from './kitchen/sim.js';
+import { KITCHEN } from './kitchen/level.js';
 
 export const SUGAR = 0;
 export const SPICE = 1;
@@ -21,6 +23,7 @@ export const NO_INPUT = Object.freeze({
 
 export function createRun(chapterId, opts = {}) {
   if (chapterId === 'world') return createWorld(WORLD, opts);   // the top-down open world
+  if (chapterId === 'kitchen') return createKitchen(KITCHEN, opts);   // chapter 1: a co-op shooter
   const ch = typeof chapterId === 'object' ? chapterId : chapterById(chapterId);   // tests pass a map
   if (!ch) throw new Error(`no chapter ${chapterId}`);
   const grid = ch.map.map((row) => row.split(''));
@@ -135,6 +138,7 @@ function tileRaw(grid, w, h, x, y) {
 // The power a player has where they stand (the finale changes powers by zone).
 export function powerOf(s, p) {
   if (s.td) return tdPowerOf(s, p);
+  if (s.kitchen) return p.id ? 'syrup' : 'spark';
   if (s.zones) {
     const cx = p.x + p.w / 2;
     let z = s.zones[0];
@@ -351,6 +355,7 @@ function moveY(s, p, dy) {
 
 export function step(s, inputs) {
   if (s.td) return tdStep(s, inputs);
+  if (s.kitchen) return kitchenStep(s, inputs);
   s.events.length = 0;
   if (s.complete) return s;
   s.tick++;

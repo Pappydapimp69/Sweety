@@ -24,6 +24,7 @@ const PLACES = {
   // the island's regions (top-down)
   plaza: { zone: 'openPlain', surface: 'sandstone', water: { preset: 'stream', at: [10, -8] } },
   meadow: { zone: 'openPlain', surface: 'packedDirt', water: { preset: 'stream', at: [-14, 8] } },
+  kitchen: { zone: 'room', surface: 'sandstone', water: { preset: 'drip', at: [6, -4] } },
 };
 const place = (theme) => PLACES[theme] || PLACES.day;
 
@@ -115,6 +116,12 @@ const HITS = {
   glass: (e) => { strike('glass', e, 0.5, 0.75); return true; },
   strike: (e) => { strike('stone', e, 0.8, 0.4); if (e.bell) setTimeout(() => eng && strike('bell', e, 0.7, 0.55), 150); return true; },
   flood: (e) => { splash(e, 400, 1.5); return false; },
+  blast: (e) => { strike('stone', e, e.big ? 1 : 0.7, 0.2); splash(e, e.big ? 120 : 60, 1.2); return false; },
+  crumble: (e) => { strike('glass', e, 0.3, 0.6); return true; },
+  tink: (e) => { strike('metal', e, 0.2, 0.8); return true; },
+  splat: (e) => { splash(e, 12, 0.6); return true; },
+  nestDown: (e) => { strike('wood', e, 1, 0.3); return false; },
+  charge: (e) => { strike('stone', e, 0.8, 0.1); return false; },
   drop: (e) => { strike('wood', e, 0.45, 0.3); return false; },
   sink: (e) => { splash(e, 150, 1.1); return false; },
   shove: (e) => { strike('wood', e, 0.35, 0.4); return false; },
@@ -137,7 +144,7 @@ export function soundFrame(view, dt) {
     const pl = place(view.theme);
     lastTheme = view.theme;
     players = run.players || [];
-    topDown = !!run.td;
+    topDown = !!run.td || !!run.kitchen;
     view.x = cam.x; view.y = cam.y;
     eng.setListener(topDown ? { x: cam.x * M, y: -cam.y * M, z: 0, yaw: 0 } : { x: cam.x * M, y: 0, z: -cam.y * M, yaw: 0 });
     if (pl.zone !== zone) { zone = pl.zone; eng.setZone(zone); }

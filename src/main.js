@@ -14,6 +14,8 @@ import { loadProgress, saveProgress } from './save.js';
 import { unlockAudio, playEvents, sfx, setVolumes } from './audio.js';
 import { playMusic } from './music.js';
 import { soundFrame } from './soundscape.js';
+import { makeKCamera, snapKCamera, drawKitchen, punch } from './kitchen/render.js';
+import { queenOf } from './kitchen/sim.js';
 import { createLockstep, scheduleLocal, receive as lsReceive, advance as lsAdvance, ready as lsReady } from './lockstep.js';
 import * as net from './net.js';
 
@@ -23,9 +25,10 @@ let W = 0, H = 0;
 
 export const POWER_NAME = {
   none: 'wave', vine: 'vine lasso (hold)', shove: 'shove', nail: 'nail gun', hammer: 'hammer', pin: 'pin', slam: 'slam (in the air)', lantern: 'shine (hold)', size: 'shrink / grow',
+  syrup: 'syrup gun (hold)', spark: 'sparkler (hold)',
   swap: 'swap places', flip: 'flip gravity', gust: 'gust', glide: 'glide: hold jump', freeze: 'stop time (hold)', dash: 'dash',
 };
-const SHAKE = { thud: 0.25, launch: 0.2, crate: 0.3, glass: 0.25, die: 0.3, boom: 0.6, bonk: 0.2, flood: 0.3 };
+const SHAKE = { blast: 0.3, queenDown: 0.9, bossStart: 0.5, ouch: 0.15, charge: 0.3, splash: 0.2, nestDown: 0.45, thud: 0.25, launch: 0.2, crate: 0.3, glass: 0.25, die: 0.3, boom: 0.6, bonk: 0.2, flood: 0.3 };
 
 const app = {
   screen: 'splash',         // splash | title | menu | chapters | minis | settings | story | play | ending | pause | complete | credits
@@ -129,8 +132,8 @@ function yardOpts(at = null) {
 // The island is built from your progress too (online, the host's).
 const WORLD_STARS = WORLD.map.join('').split('$').length - 1;
 function worldOpts() { const w = app.progress.world; return { unlocked: [...w.unlocked], hearts: [...w.hearts], stars: [...w.stars] }; }
-const mkCam = (s) => (s.td ? makeTDCamera(s) : makeCamera(s));
-const snapCam = (cam, s, instant) => (s.td ? snapTDCamera(cam, s, W, H, instant) : snapCamera(cam, s, W, H, instant));
+const mkCam = (s) => (s.kitchen ? makeKCamera(s) : s.td ? makeTDCamera(s) : makeCamera(s));
+const snapCam = (cam, s, instant) => (s.kitchen ? snapKCamera(cam, s, W, H, instant) : s.td ? snapTDCamera(cam, s, W, H, instant) : snapCamera(cam, s, W, H, instant));
 function enterWorld() {
   app.fromYard = null;
   if (app.online) { if (app.online.role === 'host') onlineStart('world'); return; }
@@ -327,13 +330,14 @@ function updateTitle() {
 const twoHere = () => (app.devices[0] && app.devices[1]) || (app.online && app.online.status === 'connected') || soloLocal();
 const needTwo = () => say('Two players needed: join a second controller or keyboard half on the title screen, or play online.');
 const MAIN_MENU = [
-  { label: 'Play', go: () => { if (!twoHere()) return needTwo(); enterWorld(); } },
+  { label: 'Play', go: () => { if (!twoHere()) return needTwo(); if (app.online) { if (app.online.role === 'host') onlineStart('kitchen'); return; } beginChapter('kitchen'); } },
   { label: 'The Yard (classic)', go: () => { if (!twoHere()) return needTwo(); enterYard(app.yardAt); } },
   { label: 'Chapters', go: () => { if (!twoHere()) return needTwo(); app.chapterIndex = Math.min(unlockedCount() - 1, CHAPTERS.length - 1); go('chapters'); } },
   { label: 'Mini-games', go: () => { if (!twoHere()) return needTwo(); go('minis'); } },
   { label: 'Play online', go: () => { app.onlineIndex = 0; go('online'); } },
   { label: 'Settings', go: () => { app.settingsBack = 'menu'; go('settings'); } },
   { label: 'Credits', go: () => go('credits') },
+  { label: 'Sweety Island (open world)', go: () => { if (!twoHere()) return needTwo(); enterWorld(); } },
 ];
 
 function updateMenu() {
@@ -551,6 +555,7 @@ function updatePlayOnline(dt) {
 
 function updatePlay(dt) {
   if (app.online) { updatePlayOnline(dt); return; }
+  if (app.hitstop > 0 && !app.turbo && !app.driver) { app.hitstop -= dt; return; }   // a beat of stillness on a big hit
   acc += Math.min(dt, 0.25);
   let steps = 0;
   if (app.turbo) acc = DT * app.turbo;   // browser tests: many steps per frame
@@ -608,6 +613,7 @@ function swapSides() {
 function onEvents(events) {
   playEvents(events);
   spawnFx(events);
+  if (app.run && app.run.kitchen) kitchenEvents(events);
   for (const e of events) {
     if (SHAKE[e.type] && S().shake) app.shake = Math.max(app.shake, SHAKE[e.type]);
     if (e.type === 'land' && e.hard && S().shake) app.shake = Math.max(app.shake, 0.12);
@@ -616,6 +622,31 @@ function onEvents(events) {
       lines.forEach(([who, text], i) => app.bubbles.push({ who: NAMES.indexOf(who), text, life: 3.2, delay: i * 2.6 }));
     }
     yardEvent(e);
+  }
+}
+
+// The Kitchen: banners, hit-stop and the camera's punch on every big moment
+const banner = (text, color) => { app.kBanner = { text, color, life: 2.5 }; };
+function kitchenEvents(events) {
+  for (const e of events) {
+    switch (e.type) {
+      case 'blast': punch(app.cam, e.big ? 1 : 0.6); if (!app.online && S().shake) app.hitstop = Math.max(app.hitstop || 0, e.big ? 0.07 : 0.035); break;
+      case 'nestDown': punch(app.cam, 1.5); if (!app.online) app.hitstop = 0.12; break;
+      case 'checkpoint': if (e.name && e.name !== app.kLast) { app.kLast = e.name; banner(e.name); } break;
+      case 'doorOpen': say('The candy door is open!'); break;
+      case 'lightsOut': banner('Lights out!', '#ffd43b'); break;
+      case 'lightsOn': banner('Let there be light!', '#ffd43b'); break;
+      case 'bossStart': banner('The Ant Queen!', '#ff8787'); playMusic('minigame'); break;
+      case 'queenAngry': say('She\'s angry now: she charges! Syrup in her path coats her; a wall stuns her.'); break;
+      case 'queenDown': banner('The cake is saved!', '#ffd6e0'); punch(app.cam, 2); if (!app.online) app.hitstop = 0.4; break;
+      case 'galleryEnd': {
+        if (e.who < 0) { say(`A draw, ${e.score[0]} each!`); break; }
+        const t = tally('gallery', e.who);
+        say(`${NAMES[e.who]} wins the Sprinkle Gallery ${e.score[e.who]} to ${e.score[1 - e.who]}! All time: Sugar ${t[0]}, Spice ${t[1]}.`);
+        break;
+      }
+      default: break;
+    }
   }
 }
 
@@ -701,6 +732,16 @@ function spawnFx(events) {
     switch (e.type) {
       case 'heart': add(8, 'heart', '#ff4d6d', 5); break;
       case 'die': add(14, 'dot', PLAYER_COLORS[e.who]); break;
+      case 'blast': app.fx.push({ x, y, vx: 0, vy: -12, life: 0.35, max: 0.35, kind: 'blast', r: e.r }); add(e.big ? 18 : 10, 'dot', '#ff922b', 8, 0.5); add(6, 'dot', '#ffd43b', 5, 0.4); break;
+      case 'splat': add(4, 'dot', '#e8590c', 2.5, 0.3); break;
+      case 'crumble': add(8, 'dot', '#ffffff', 5, 0.5); break;
+      case 'antDown': add(10, 'dot', '#3b2a26', 5, 0.5); break;
+      case 'nestDown': add(24, 'dot', '#c08552', 8, 0.8); break;
+      case 'zap': case 'tink': add(4, 'dot', '#fff3bf', 4, 0.25); break;
+      case 'ouch': add(6, 'dot', '#ff4d6d', 4, 0.4); break;
+      case 'sprinkle': add(8, 'dot', ['#ff6b6b', '#ffd43b', '#69db7c', '#4dabf7'][e.n % 4], 5, 0.5); break;
+      case 'queenDown': add(40, 'dot', '#ffd43b', 10, 1.2); add(30, 'dot', '#ff6b9d', 8, 1.2); break;
+      case 'splash': add(12, 'dot', '#82c91e', 5, 0.5); break;
       case 'thud': add(10, 'dot', '#ced4da', 4); break;
       case 'land': add(e.hard ? 8 : 4, 'dot', 'rgba(255,255,255,0.8)', 2.5, 0.35); break;
       case 'crate': add(16, 'dot', '#c8873e', 8); break;
@@ -1143,6 +1184,7 @@ function drawStory() {
 
 // the theme on screen: the chapter's, or in the Yard the district the camera is in
 function viewTheme(s) {
+  if (s.kitchen) return 'kitchen';
   if (s.td) return tdZoneOf(s, app.cam.x, app.cam.y).id;   // the island: plaza, meadow, workshop, ...
   const zone = s.zones && s.zones[0].theme ? zoneAt(s, app.cam.x) : null;
   return zone ? zone.theme : chapterById(s.chapterId).theme;
@@ -1152,7 +1194,12 @@ function drawPlay() {
   const s = app.run, ch = chapterById(s.chapterId);
   ctx.save();
   if (app.shake > 0) ctx.translate((Math.random() - 0.5) * app.shake * 22, (Math.random() - 0.5) * app.shake * 22);
-  if (s.td) {
+  if (s.kitchen) {
+    drawKitchen(ctx, s, app.cam, W, H, app.fx, app.t);
+    drawTDSigns(s, 0);
+    drawBubbles(s);
+    if (soloLocal()) drawActiveMarker(s);
+  } else if (s.td) {
     drawTD(ctx, s, app.cam, W, H, app.fx, app.t);
     drawTDSigns(s);
     drawBubbles(s);
@@ -1176,6 +1223,8 @@ function drawPlay() {
     txt(`${s.score[1]}`, W / 2 + 60, 40, { size: P * 2.2, color: PLAYER_COLORS[1] });
     if (s.mode === 'rain') txt(`${Math.max(0, Math.ceil(s.timeLeft))}s`, W / 2, 40 + P * 1.8, { size: P });
     if (s.mode === 'potato') txt(`round ${s.round}`, W / 2, 40 + P * 1.8, { size: P * 0.8 });
+  } else if (s.kitchen) {
+    drawKitchenHUD(s, P);
   } else if (s.yard || s.td) {
     const label = s.td ? `${app.progress.world.stars.length} / ${WORLD_STARS}` : `${Object.keys(app.progress.stars).length} / ${YARD_STARS}`;
     ctx.font = `700 ${P}px ${FONT}`;
@@ -1275,9 +1324,29 @@ function drawSigns(s) {
 }
 
 // the island's signs: read out at the bottom when either of you stands near one
-function drawTDSigns(s) {
+// the Kitchen's HUD: each of you as hearts, the queen's health while she's up, the banner of the moment
+function drawKitchenHUD(s, P) {
+  s.players.forEach((p, i) => {
+    for (let h = 0; h < 3; h++) heart(ctx, (i ? W - 30 - h * P * 1.2 : 30 + h * P * 1.2), 24 + P * 1.4, P * 0.42, h < p.hp ? PLAYER_COLORS[i] : 'rgba(255,255,255,0.25)', h < p.hp);
+  });
+  const q = queenOf(s);
+  if (q && q.state !== 'sleep' && !q.dead) {
+    const bw = Math.min(520, W * 0.6), bx = (W - bw) / 2, by = 46;
+    txt('The Ant Queen', W / 2, by - P * 0.5, { size: P * 0.85, color: '#ffd6e0' });
+    panel(bx, by, bw, P * 0.7, 'rgba(28,20,52,0.7)', 6);
+    ctx.fillStyle = q.coat ? '#ff922b' : '#c2255c'; ctx.fillRect(bx + 3, by + 3, (bw - 6) * Math.max(0, q.hp / q.max), P * 0.7 - 6);
+    if (!q.coat) txt('her shell shrugs off sparks: syrup her first', W / 2, by + P * 1.5, { size: P * 0.6, color: 'rgba(255,255,255,0.8)', weight: '500' });
+  }
+  if (app.kBanner && app.kBanner.life > 0) {
+    ctx.globalAlpha = Math.min(1, app.kBanner.life, (2.5 - app.kBanner.life) * 4);
+    txt(app.kBanner.text, W / 2, H * 0.28, { size: P * 2.4, color: app.kBanner.color || '#ffffff' });
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawTDSigns(s, off = 0.5) {
   const P = textPx(H) * 0.85;
-  const e = s.ents.find((q) => q.type === 'sign' && s.players.some((p) => !p.dead && Math.hypot(p.x - q.x - 0.5, p.y - q.y - 0.5) < 2.6));
+  const e = s.ents.find((q) => q.type === 'sign' && s.players.some((p) => !p.dead && Math.hypot(p.x - q.x - off, p.y - q.y - off) < 2.6));
   if (!e) return;
   const ab = (i) => (remoteName(i) ? 'their power button' : labelsFor(devOf(i)).ability);
   const text = e.text.replace(/Sugar: /, `Sugar (${ab(0)}): `).replace(/Spice: /, `Spice (${ab(1)}): `);
