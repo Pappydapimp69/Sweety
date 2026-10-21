@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TD renderer view</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #222; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+// A standalone page for looking at the top-down renderer: build the world, put the players
+// somewhere, step a few frames with no input, draw. tests/td-view.mjs drives it with Playwright:
+//   location.hash = '#meadow'  then  window.__td.ready === true
+import { createRun, NO_INPUT } from '/src/sim.js';
+import { step } from '/src/td/sim.js';
+import { REGIONS, RW, RH } from '/src/td/world.js';
+import { drawTD, makeTDCamera, snapTDCamera } from '/src/td/render.js';
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const O = (id) => { if (id === 'plaza') return [RW, RH]; const r = REGIONS.find((q) => q.id === id); return [r.col * RW, r.row * RH]; };
+
+// a little of everything, for the regions that are still pits
+function demo(s, id) {
+  const [X, Y] = O(id);
+  const set = (x, y, c) => { s.grid[Y + y][X + x] = c; };
+  const rect = (x0, y0, x1, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(x, y, c); };
+  rect(6, 5, 28, 20, '.');
+  rect(6, 5, 28, 5, '#'); rect(10, 9, 13, 10, '#');
+  rect(18, 12, 23, 15, 'w'); set(20, 13, 'u');
+  rect(8, 15, 10, 17, 'o');
+  for (const x of [15, 17, 25, 27]) set(x, 8, 'T');
+  set(24, 10, 'r'); set(25, 10, 'r');
+  rect(13, 18, 15, 18, '^');
+  rect(18, 17, 23, 17, '='); rect(18, 16, 23, 16, 'w'); rect(18, 18, 23, 18, 'w');
+  set(26, 15, '1'); set(26, 17, 'B'); set(26, 13, '6');
+  s.ents.push({ type: 'crate', x: X + 16, y: Y + 13, i: s.ents.length });
+  return [X + 16.5, Y + 12.5, X + 19.5, Y + 11.2];
+}
+
+const SCENES = {
+  plaza: (s) => { const [X, Y] = O('plaza'); return [X + 14.5, Y + 16.5, X + 19, Y + 17.2]; },
+  'plaza-toys': (s) => {
+    const [X, Y] = O('plaza');
+    const b = s.ents.find((e) => e.type === 'ball'); b.score = [2, 3]; b.x = X + 11.2; b.y = Y + 6.2;
+    s.ents.find((e) => e.type === 'balloons').n = [3, 7];
+    return [X + 10.5, Y + 6.5, X + 21.5, Y + 8.5];
+  },
+  'plaza-piano': (s) => {
+    const [X, Y] = O('plaza');
+    s.ents.find((e) => e.type === 'race').phase = 'count'; s.ents.find((e) => e.type === 'race').count = 2.5;
+    return [X + 22.5, Y + 21.5, X + 27.5, Y + 15.5];
+  },
+  meadow: (s) => {
+    const [X, Y] = O('meadow');
+    // her vine over the river (set here, not by the sim), his crate on the plate: her bridge is up
+    const cells = [];
+    for (let y = 8; y <= 10; y++) { cells.push([X + 10, Y + y, 'w']); s.grid[Y + y][X + 10] = 'v'; }
+    s.vine = { cells };
+    const c = s.ents.find((e) => e.type === 'crate' && e.x === X + 20); c.y = Y + 14;
+    return [X + 10.5, Y + 7.3, X + 10.5, Y + 9.5];
+  },
+  'meadow-pond': (s) => { const [X, Y] = O('meadow'); return [X + 10.5, Y + 16.5, X + 17.5, Y + 18.5]; },
+  'meadow-stone': (s) => { const [X, Y] = O('meadow'); s.ents.find((e) => e.type === 'stone' && e.region === 0).lit = false; return [X + 15.5, Y + 3.6, X + 16.6, Y + 4.4]; },
+  workshop: (s) => { const [X, Y] = O('workshop'); return [X + 18.5, Y + 8.5, X + 24.5, Y + 12.5]; },
+  'workshop-open': (s) => {
+    const [X, Y] = O('workshop');
+    s.ents.find((e) => e.type === 'switch' && e.g === 3).on = true;
+    s.grid[Y + 12][X + 21] = '.'; s.grid[Y + 12][X + 22] = '.';
+    return [X + 16.5, Y + 12.5, X + 12.5, Y + 12.2];
+  },
+  'workshop-garden': (s) => { const [X, Y] = O('workshop'); return [X + 11.5, Y + 5.5, X + 12.5, Y + 6.5]; },
+  'workshop-fly': (s) => {
+    const [X, Y] = O('workshop');
+    return [X + 11.5, Y + 5.5, X + 12.5, Y + 5.5, (s) => { s.players[0].fly = { x0: X + 11.5, y0: Y + 5.5, x1: X + 6.5, y1: Y + 6.5, t: 0, dur: 0.8 }; }, 22];
+  },
+  border: (s) => { const [X, Y] = O('meadow'); return [X + 16, Y - 1.5, X + 17, Y + 1.5]; },
+  papercut: (s) => demo(s, 'night'),
+  sepia: (s) => demo(s, 'attic'),
+  cel: (s) => demo(s, 'sky'),
+  brass: (s) => demo(s, 'clock'),
+  cosy: (s) => demo(s, 'home'),
+};
+
+let s, cam;
+function size() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(innerWidth * dpr); canvas.height = Math.round(innerHeight * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function scene(name) {
+  s = createRun('world', { unlocked: [0, 1], hearts: [] });
+  const r = (SCENES[name] || SCENES.plaza)(s);
+  s.players[0].x = r[0]; s.players[0].y = r[1]; s.players[1].x = r[2]; s.players[1].y = r[3];
+  s.players.forEach((p) => { p.safe = { x: p.x, y: p.y }; });
+  for (let i = 0; i < 3; i++) step(s, [NO_INPUT, NO_INPUT]);
+  if (r[4]) { r[4](s); for (let i = 0; i < r[5]; i++) step(s, [NO_INPUT, NO_INPUT]); }
+  size();
+  cam = makeTDCamera(s);
+  snapTDCamera(cam, s, innerWidth, innerHeight, true);
+  draw(s.time);
+}
+function draw(t) { drawTD(ctx, s, cam, innerWidth, innerHeight, [], t); }
+// time n frames of drawing (the chunks are warm after the first)
+function bench(n = 120) {
+  draw(s.time);
+  const t0 = performance.now();
+  for (let i = 0; i < n; i++) draw(s.time + i / 60);
+  return (performance.now() - t0) / n;
+}
+window.__td = { scene, draw, bench, get s() { return s; }, scenes: Object.keys(SCENES), ready: false };
+const go = () => { window.__td.ready = false; scene(location.hash.slice(1) || 'plaza'); window.__td.ready = true; };
+addEventListener('hashchange', go);
+addEventListener('resize', () => { size(); snapTDCamera(cam, s, innerWidth, innerHeight, true); draw(s.time); });
+go();
+</script>
+</body>
+</html>

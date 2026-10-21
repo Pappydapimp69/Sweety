@@ -48,6 +48,7 @@ test('render never writes sim state: the main path through the Meadow and the Wo
     checkReadOnly(s, cam, `${ph.name} (end)`); checks++;
   }
   assert.ok(checks > 40, `only ${checks} checks`);
+  assert.deepEqual(s.hearts, [0, 1], 'the route did not reach both hearts: the states drawn were not the whole path');
 });
 
 test('render never writes sim state: every toy, mid-game, and every live tile', () => {
@@ -124,7 +125,7 @@ test('the camera frames both players, fits the short side, and stays on the map'
 });
 
 test('no Math.random and no per-frame blur in the renderer', async () => {
-  const src = (await import('node:fs')).readFileSync(new URL('../src/td/render.js', import.meta.url), 'utf8');
+  const src = (await import('node:fs')).readFileSync(new URL('../src/td/render.js', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
   assert.ok(!/Math\.random/.test(src), 'Math.random in td/render.js');
   assert.ok(!/shadowBlur|\.filter\s*=/.test(src), 'shadowBlur or ctx.filter in td/render.js');
 });
