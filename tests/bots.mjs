@@ -2,8 +2,8 @@
 // input shape the keyboard and pads produce.
 import { step, solidTile, NO_INPUT } from '../src/sim.js';
 
-export const cx = (p) => p.x + p.w / 2;
-export const feet = (p) => p.y + p.h;
+export const cx = (p) => p.x + (p.w ?? 0) / 2;   // top-down players have no box: x, y is the centre
+export const feet = (p) => p.y + (p.h ?? 0);
 
 export function walk(p, tx, extra = {}) {
   const d = tx - cx(p);
