@@ -14,8 +14,21 @@ import { loadProgress, saveProgress } from './save.js';
 import { unlockAudio, playEvents, sfx, setVolumes } from './audio.js';
 import { playMusic } from './music.js';
 import { soundFrame } from './soundscape.js';
-import { makeKCamera, snapKCamera, drawKitchen, punch } from './kitchen/render.js';
-import { queenOf } from './kitchen/sim.js';
+import { queenOf } from './k3/sim.js';
+
+// the 3D chapters draw with WebGL on a canvas under the 2D one (the HUD stays 2D, on top)
+let glCanvas = null, k3view = null, k3loading = null;
+function loadK3() {
+  if (!glCanvas) {
+    glCanvas = document.createElement('canvas');
+    glCanvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;display:none;z-index:0';
+    canvas.style.position = 'relative'; canvas.style.zIndex = '1';
+    document.body.insertBefore(glCanvas, canvas);
+  }
+  k3loading ??= import('./k3/render.js').then((m) => { k3view = m.createK3View(glCanvas); }).catch((e) => { console.error(e); k3loading = null; });
+  return k3loading;
+}
+const punch = (c, n) => { c.punch = Math.max(c.punch || 0, n); };
 import { createLockstep, scheduleLocal, receive as lsReceive, advance as lsAdvance, ready as lsReady } from './lockstep.js';
 import * as net from './net.js';
 
@@ -132,8 +145,10 @@ function yardOpts(at = null) {
 // The island is built from your progress too (online, the host's).
 const WORLD_STARS = WORLD.map.join('').split('$').length - 1;
 function worldOpts() { const w = app.progress.world; return { unlocked: [...w.unlocked], hearts: [...w.hearts], stars: [...w.stars] }; }
-const mkCam = (s) => (s.kitchen ? makeKCamera(s) : s.td ? makeTDCamera(s) : makeCamera(s));
-const snapCam = (cam, s, instant) => (s.kitchen ? snapKCamera(cam, s, W, H, instant) : s.td ? snapTDCamera(cam, s, W, H, instant) : snapCamera(cam, s, W, H, instant));
+// the 3D chapters keep only a listener point (between you) and the punch here; their cameras live in the view
+function k3Cam(c, s) { c.x = (s.players[0].x + s.players[1].x) / 2; c.y = -(s.players[0].y + s.players[1].y) / 2; c.scale = 40; c.punch = (c.punch || 0) * 0.85; return c; }
+const mkCam = (s) => (s.k3 ? (loadK3(), k3Cam({ punch: 0 }, s)) : s.td ? makeTDCamera(s) : makeCamera(s));
+const snapCam = (cam, s, instant) => (s.k3 ? k3Cam(cam, s) : s.td ? snapTDCamera(cam, s, W, H, instant) : snapCamera(cam, s, W, H, instant));
 function enterWorld() {
   app.fromYard = null;
   if (app.online) { if (app.online.role === 'host') onlineStart('world'); return; }
@@ -613,7 +628,7 @@ function swapSides() {
 function onEvents(events) {
   playEvents(events);
   spawnFx(events);
-  if (app.run && app.run.kitchen) kitchenEvents(events);
+  if (app.run && app.run.k3) kitchenEvents(events);
   for (const e of events) {
     if (SHAKE[e.type] && S().shake) app.shake = Math.max(app.shake, SHAKE[e.type]);
     if (e.type === 'land' && e.hard && S().shake) app.shake = Math.max(app.shake, 0.12);
@@ -726,13 +741,13 @@ function spawnFx(events) {
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + Math.random();
         const v = speed * (0.5 + Math.random() * 0.5);
-        app.fx.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, life, max: life, kind, color });
+        app.fx.push({ x, y, z: e.z, vx: Math.cos(a) * v, vy: Math.sin(a) * v - (e.z === undefined ? 2 : 0), life, max: life, kind, color });
       }
     };
     switch (e.type) {
       case 'heart': add(8, 'heart', '#ff4d6d', 5); break;
       case 'die': add(14, 'dot', PLAYER_COLORS[e.who]); break;
-      case 'blast': app.fx.push({ x, y, vx: 0, vy: -12, life: 0.35, max: 0.35, kind: 'blast', r: e.r }); add(e.big ? 18 : 10, 'dot', '#ff922b', 8, 0.5); add(6, 'dot', '#ffd43b', 5, 0.4); break;
+      case 'blast': app.fx.push({ x, y, z: e.z, vx: 0, vy: 0, life: 0.35, max: 0.35, kind: 'blast', r: e.r }); add(e.big ? 18 : 10, 'dot', '#ff922b', 8, 0.5); add(6, 'dot', '#ffd43b', 5, 0.4); break;
       case 'splat': add(4, 'dot', '#e8590c', 2.5, 0.3); break;
       case 'crumble': add(8, 'dot', '#ffffff', 5, 0.5); break;
       case 'antDown': add(10, 'dot', '#3b2a26', 5, 0.5); break;
@@ -801,7 +816,8 @@ function watchZone(dt) {
 }
 
 function updateFx(dt) {
-  for (const f of app.fx) { f.life -= dt; f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 12 * dt; }
+  const g = app.run && app.run.k3 ? 0 : 12;
+  for (const f of app.fx) { f.life -= dt; f.x += f.vx * dt; f.y += f.vy * dt; f.vy += g * dt; }
   app.fx = app.fx.filter((f) => f.life > 0);
   for (const b of app.bubbles) { if (b.delay > 0) b.delay -= dt; else b.life -= dt; }
   app.bubbles = app.bubbles.filter((b) => b.life > 0);
@@ -1184,7 +1200,7 @@ function drawStory() {
 
 // the theme on screen: the chapter's, or in the Yard the district the camera is in
 function viewTheme(s) {
-  if (s.kitchen) return 'kitchen';
+  if (s.k3) return 'kitchen';
   if (s.td) return tdZoneOf(s, app.cam.x, app.cam.y).id;   // the island: plaza, meadow, workshop, ...
   const zone = s.zones && s.zones[0].theme ? zoneAt(s, app.cam.x) : null;
   return zone ? zone.theme : chapterById(s.chapterId).theme;
@@ -1194,8 +1210,11 @@ function drawPlay() {
   const s = app.run, ch = chapterById(s.chapterId);
   ctx.save();
   if (app.shake > 0) ctx.translate((Math.random() - 0.5) * app.shake * 22, (Math.random() - 0.5) * app.shake * 22);
-  if (s.kitchen) {
-    drawKitchen(ctx, s, app.cam, W, H, app.fx, app.t);
+  if (s.k3) {
+    ctx.clearRect(0, 0, W, H);
+    if (k3view) k3view.draw(s, W, H, app.t, app.fx, app.cam.punch || 0);
+    else txt('Loading the kitchen…', W / 2, H / 2, { size: textPx(H) });
+    ctx.fillStyle = 'rgba(20,10,35,0.9)'; ctx.fillRect(W / 2 - 2, 0, 4, H);   // the split
     drawTDSigns(s, 0);
     drawBubbles(s);
     if (soloLocal()) drawActiveMarker(s);
@@ -1223,7 +1242,7 @@ function drawPlay() {
     txt(`${s.score[1]}`, W / 2 + 60, 40, { size: P * 2.2, color: PLAYER_COLORS[1] });
     if (s.mode === 'rain') txt(`${Math.max(0, Math.ceil(s.timeLeft))}s`, W / 2, 40 + P * 1.8, { size: P });
     if (s.mode === 'potato') txt(`round ${s.round}`, W / 2, 40 + P * 1.8, { size: P * 0.8 });
-  } else if (s.kitchen) {
+  } else if (s.k3) {
     drawKitchenHUD(s, P);
   } else if (s.yard || s.td) {
     const label = s.td ? `${app.progress.world.stars.length} / ${WORLD_STARS}` : `${Object.keys(app.progress.stars).length} / ${YARD_STARS}`;
@@ -1433,6 +1452,8 @@ function drawCredits() {
 
 let last = 0;
 function frame(now) {
+  const k3on = !!(app.run && app.run.k3) && ['play', 'ending', 'pause', 'complete'].includes(app.screen);
+  if (glCanvas && (glCanvas.style.display === 'block') !== k3on) glCanvas.style.display = k3on ? 'block' : 'none';
   const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
   last = now;
   app.t += dt;

@@ -5,7 +5,7 @@
 // helps; in the arcade games it plays simply. It only ever produces inputs, like a pad.
 import { NO_INPUT as I } from './sim.js';
 import { chapterById } from './levels.js';
-import { kitchenBot } from './kitchen/bot.js';
+import { k3Bot } from './k3/bot.js';
 
 let P = null, B = null, TP = null, TB = null;   // the routes and the bot helpers, loaded on demand
 let loading = null;
@@ -25,7 +25,7 @@ const cx = (p) => p.x + p.w / 2, feet = (p) => p.y + p.h;
 const STUCK = 1200;   // ticks without a step of the plan getting done
 
 export function makeAI(run) {
-  if (run.kitchen) return { kitchen: true, ready: true };   // the Kitchen's own player
+  if (run.k3) return { k3: true, ready: true };   // the 3D Kitchen's own player
   if (run.td) {   // the island: each region's plan you haven't finished, then follow
     const route = TP ? [...(run.hearts.includes(0) ? [] : TP.meadowPhases()), ...(run.hearts.includes(1) ? [] : TP.workshopPhases())] : [];
     return { route: route.length ? route : null, i: 0, cpI: 0, wait: 0, still: 0, tries: {}, lost: false, ready: aiReady() };
@@ -37,7 +37,7 @@ export function makeAI(run) {
 // Inputs for the given slots (one for a partner, both to watch).
 export function aiInputs(ai, s, slots) {
   const out = [null, null];
-  if (s.kitchen) { for (const k of slots) out[k] = s.complete ? I : kitchenBot(s, k); return out; }
+  if (s.k3) { for (const k of slots) out[k] = s.complete ? I : k3Bot(s, k); return out; }
   if (!aiReady() || s.complete) { for (const k of slots) out[k] = I; return out; }
   if (ai.route) {
     for (const e of s.events) {
