@@ -13,6 +13,7 @@ import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads
 import { loadProgress, saveProgress } from './save.js';
 import { unlockAudio, playEvents, sfx, setVolumes } from './audio.js';
 import { playMusic } from './music.js';
+import { soundFrame } from './soundscape.js';
 import { createLockstep, scheduleLocal, receive as lsReceive, advance as lsAdvance, ready as lsReady } from './lockstep.js';
 import * as net from './net.js';
 
@@ -1140,6 +1141,13 @@ function drawStory() {
   txt(`${st.i + 1}/${st.lines.length}  ·  ${L.ok} to continue`, bx + bw - 20, by + bh - P * 0.8, { size: P * 0.7, color: '#868e96', align: 'right', shadow: false, weight: '600' });
 }
 
+// the theme on screen: the chapter's, or in the Yard the district the camera is in
+function viewTheme(s) {
+  if (s.td) return tdZoneOf(s, app.cam.x, app.cam.y).id;   // the island: plaza, meadow, workshop, ...
+  const zone = s.zones && s.zones[0].theme ? zoneAt(s, app.cam.x) : null;
+  return zone ? zone.theme : chapterById(s.chapterId).theme;
+}
+
 function drawPlay() {
   const s = app.run, ch = chapterById(s.chapterId);
   ctx.save();
@@ -1150,8 +1158,7 @@ function drawPlay() {
     drawBubbles(s);
     if (soloLocal()) drawActiveMarker(s);
   } else {
-    const zone = s.zones && s.zones[0].theme ? zoneAt(s, app.cam.x) : null;
-    drawWorld(ctx, s, app.cam, W, H, app.fx, zone ? zone.theme : ch.theme, app.t);
+    drawWorld(ctx, s, app.cam, W, H, app.fx, viewTheme(s), app.t);
     drawSigns(s);
     drawBubbles(s);
     if (soloLocal() && s.mode === 'chapter') drawActiveMarker(s);
@@ -1361,6 +1368,7 @@ function frame(now) {
   last = now;
   app.t += dt;
   watchPads();
+  soundFrame((app.screen === 'play' || app.screen === 'ending') && app.run ? { run: app.run, cam: app.cam, theme: viewTheme(app.run) } : null, dt);
   switch (app.screen) {
     case 'splash': updateSplash(dt); if (app.screen === 'splash') drawSplash(); break;
     case 'title': updateTitle(); drawTitle(); break;
@@ -1448,4 +1456,5 @@ window.__sweety = {
   start: (id) => startRun(id),
   yard: (at = null) => enterYard(at),
   begin: (id) => beginChapter(id),
+  island: () => enterWorld(),
 };
