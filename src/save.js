@@ -2,7 +2,7 @@
 // serves every project of one account from one origin.
 const KEY = 'sweety:progress';
 
-export const DEFAULT_SETTINGS = Object.freeze({ music: 6, sfx: 8, gentle: false, shake: true });
+export const DEFAULT_SETTINGS = Object.freeze({ music: 6, sfx: 8, gentle: false, shake: true, alone: 'switch' });
 const fresh = () => ({ unlocked: 1, hearts: {}, done: {}, settings: { ...DEFAULT_SETTINGS }, seenCredits: false, stars: {}, tally: {}, records: {}, cuddles: 0 });
 
 // the Yard's additions (Brain T3): additive, every field defaulted, so an old save loads unchanged
@@ -48,6 +48,7 @@ export function loadProgress() {
         sfx: num(st.sfx, DEFAULT_SETTINGS.sfx),
         gentle: typeof st.gentle === 'boolean' ? st.gentle : DEFAULT_SETTINGS.gentle,
         shake: typeof st.shake === 'boolean' ? st.shake : DEFAULT_SETTINGS.shake,
+        alone: st.alone === 'ai' ? 'ai' : 'switch',
       },
       seenCredits: !!p.seenCredits,
       stars: cleanStars(p.stars),

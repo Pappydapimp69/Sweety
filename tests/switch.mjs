@@ -88,6 +88,20 @@ try {
   const s2 = await app(() => window.__sweety.app.run.players.map((p) => p.x));
   check(s2[1] > s1[1] + 1 && Math.abs(s2[0] - s1[0]) < 0.2, 'after Tab the same keys drive Spice');
   await shot('s4-solo-spice');
+
+  // ---- testing alone with the AI partner: Settings -> Playing alone -> AI
+  await app(() => { window.__sweety.app.progress.settings.alone = 'ai'; window.__sweety.app.active = 0; });   // you play Sugar, the AI Spice
+  await app(() => window.__sweety.start('garden'));
+  await until(() => window.__sweety.app.run.tick > 30);
+  const a0 = await app(() => window.__sweety.app.run.players.map((p) => p.x));
+  check(await until(() => window.__sweety.app.run.players[1].x > 12, null, 15000), 'the AI moves Spice while you stand still');
+  const a1 = await app(() => window.__sweety.app.run.players.map((p) => p.x));
+  check(Math.abs(a1[0] - a0[0]) < 0.3, 'and leaves Sugar to you');
+  await shot('s5-ai-partner');
+  // watch: the AI plays both to the end of the Garden (turbo, so it doesn't take minutes)
+  await app(() => { const a = window.__sweety.app; a.watch = true; a.turbo = 6; });
+  check(await until(() => ['ending', 'story', 'complete'].includes(window.__sweety.app.screen) || window.__sweety.app.run.complete, null, 90000), 'watching: the AI plays the Garden to the end');
+  await app(() => { const a = window.__sweety.app; a.watch = false; a.turbo = 0; a.progress.settings.alone = 'switch'; });
   check(errors.length === 0, `no page errors ${errors.join(' | ')}`);
 } catch (e) { console.log('FAIL -', e); failed++; }
 await browser.close(); server.kill();

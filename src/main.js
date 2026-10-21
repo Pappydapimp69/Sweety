@@ -5,6 +5,7 @@ import { CHAPTERS, MINIGAMES, STORY, chapterById } from './levels.js';
 import { createRun, step, NAMES, powerOf, NO_INPUT } from './sim.js';
 import { drawWorld, drawCharacter, snapCamera, makeCamera, textPx, PLAYER_COLORS, heart, zoneAt, drawStar } from './render.js';
 import { YARD } from './yard.js';
+import { preloadAI, makeAI, aiInputs, aiReady } from './ai.js';
 import { initInput, read, flush, labelsFor, onAnyKey, ALL_DEVICES, connectedPads, padConnected, initTouch, setTouchLayout, touchSeen } from './input.js';
 import { loadProgress, saveProgress } from './save.js';
 import { unlockAudio, playEvents, sfx, setVolumes } from './audio.js';
@@ -127,7 +128,7 @@ function startRun(id, extra = null) {
   const opts = { gentle };
   if (id === 'yard') Object.assign(opts, extra || (app.online && app.online.yardOpts) || yardOpts(app.yardAt));
   app.run = createRun(id, opts);
-  app.zone = null; app.pendingEnter = null;
+  app.zone = null; app.pendingEnter = null; app.ai = null;
   if (app.online) startLockstep();
   app.cam = makeCamera(app.run);
   snapCamera(app.cam, app.run, W, H, true);
@@ -403,6 +404,7 @@ const SETTINGS = [
   { label: 'Sounds', get: () => `${S().sfx} / 10`, left: () => { S().sfx = Math.max(0, S().sfx - 1); }, right: () => { S().sfx = Math.min(10, S().sfx + 1); } },
   { label: 'Gentle mode', get: () => (S().gentle ? 'on: quick respawns where you stood' : 'off'), toggle: () => { S().gentle = !S().gentle; } },
   { label: 'Screen shake', get: () => (S().shake ? 'on' : 'off'), toggle: () => { S().shake = !S().shake; } },
+  { label: 'Playing alone', get: () => (S().alone === 'ai' ? 'an AI plays the other one (for testing)' : 'you switch between them'), toggle: () => { S().alone = S().alone === 'ai' ? 'switch' : 'ai'; if (S().alone === 'ai') preloadAI(); } },
   { label: 'Back', back: true },
 ];
 
@@ -441,7 +443,7 @@ function pauseItems() {
   const back = app.run && app.run.mode === 'chapter' ? [inYard ? 'Back to the Plaza (both)' : 'Back to checkpoint (both)'] : [];
   const restart = inYard ? [] : [app.online ? 'Restart (both of you)' : 'Restart'];
   const yard = app.fromYard && !inYard ? ['Back to the Yard'] : [];
-  if (!app.online) return ['Keep playing', ...back, ...restart, ...yard, 'Settings', 'Quit to menu'];
+  if (!app.online) return ['Keep playing', ...back, ...restart, ...yard, app.watch ? 'Stop watching' : 'Watch the AI play it', 'Settings', 'Quit to menu'];
   return app.online.role === 'host' ? ['Keep playing', ...back, ...restart, ...yard, 'Settings', 'Leave online game'] : ['Keep playing', ...back, 'Settings', 'Leave online game'];
 }
 function pauseGame() {
@@ -476,6 +478,8 @@ function updatePause() {
     if (item === 'Keep playing') resume();
     else if (item.startsWith('Back to checkpoint') || item.startsWith('Back to the Plaza')) { app.regroup = true; resume(); }
     else if (item === 'Back to the Yard') enterYard(app.fromYard);
+    else if (item === 'Watch the AI play it') { preloadAI(); app.watch = true; resume(); }
+    else if (item === 'Stop watching') { app.watch = false; resume(); }
     else if (item === 'Restart') startRun(app.run.chapterId);
     else if (item === 'Settings') { app.settingsBack = 'pause'; go('settings'); }
     else { const id = app.run.chapterId; app.run = null; app.fromYard = null; go(id === 'yard' ? 'menu' : CHAPTERS.some((c) => c.id === id) ? 'chapters' : 'minis'); }
@@ -544,7 +548,24 @@ function updatePlay(dt) {
   if (steps >= MAX_STEPS && !app.turbo) acc = 0;   // fell behind: drop the debt, don't spiral
 }
 
+const aiOn = () => !app.online && (app.watch || (soloLocal() && S().alone === 'ai'));
 function localInputs() {
+  if (aiOn()) {   // testing alone: an AI plays the other one (or both, to watch)
+    preloadAI();   // cached after the first time
+    if (!app.ai || app.ai.run !== app.run || (!app.ai.ready && aiReady())) { app.ai = makeAI(app.run); app.ai.run = app.run; }
+    if (app.watch) {
+      const r = read(app.devices[0]);
+      const inputs = aiInputs(app.ai, app.run, [0, 1]);
+      inputs[0] = { ...inputs[0], pausePressed: r.pausePressed };
+      return inputs;
+    }
+    const r = read(app.devices[0]);
+    if (r.switchPressed) { app.active = 1 - app.active; sfx('confirm'); }
+    const inputs = aiInputs(app.ai, app.run, [1 - app.active]);
+    if (app.ai.lost && !app.ai.told) { app.ai.told = true; say('The AI lost the plan here. It will follow you and hold switches; Back to checkpoint can help.'); }
+    inputs[app.active] = r;
+    return inputs;
+  }
   if (soloLocal()) {
     const r = read(app.devices[0]);
     if (r.switchPressed) { app.active = 1 - app.active; sfx('confirm'); }
@@ -932,7 +953,7 @@ function drawTitle() {
     : ready
     ? ['Both here! Either of you press jump to start.', `Want the other character? Press left or right to trade places (in a level: ${labelsFor(app.devices[0]).switch} or ${labelsFor(app.devices[1]).switch}).`]
     : app.devices[0]
-    ? ['Waiting for player two to press jump.', `Alone? Press jump again: you'll play both, ${labelsFor(app.devices[0]).switch} switches who you are. Left/right picks your side.`]
+    ? ['Waiting for player two to press jump.', `Alone? Press jump again: you'll play both, ${labelsFor(app.devices[0]).switch} switches who you are (or an AI plays one: Settings).`]
     : ['Keyboard left half: jump is W  ·  right half: jump is ↑  ·  controller or touch screen: A',
        pads ? `${pads} controller${pads > 1 ? 's' : ''} found. Press A on yours to join.` : 'Controllers: press any button first so the browser can see them.'];
   lines.forEach((l, i) => txt(l, W / 2, H * 0.8 + i * textPx(H) * 1.6, { size: textPx(H) * (i ? 0.75 : 0.9), color: '#3c096c', shadow: false, weight: i ? '500' : '700' }));
@@ -1127,6 +1148,7 @@ function drawPlay() {
     const L = labelsFor(devOf(i));
     const power = powerOf(s, s.players[i]);
     const line = remoteName(i) ? `${NAMES[i]} (online) · ${POWER_NAME[power] || power}`
+      : aiOn() && (app.watch || i !== app.active) ? `${NAMES[i]}: the AI is playing${app.watch ? ' (pause to stop watching)' : ` · ${L.switch} to take over`}`
       : soloLocal() && i !== app.active ? `${NAMES[i]}: ${L.switch} to play ${NAMES[i]}`
       : `${NAMES[i]}: move ${L.move} · jump ${L.jump} · ${POWER_NAME[power] || power}${power === 'glide' ? '' : ` ${L.ability}`}`;
     ctx.globalAlpha = soloLocal() && i !== app.active ? 0.6 : 1;
@@ -1338,6 +1360,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'Backspace') { o.typed = o.typed.slice(0, -1); flush(); }
 });
 // A link with ?join=CODE goes straight to joining after the first player joins.
+if (S().alone === 'ai') preloadAI();
 const joinParam = new URLSearchParams(location.search).get('join');
 if (joinParam && /^[A-Z]{4}$/i.test(joinParam)) app.pendingJoin = joinParam.toUpperCase();
 // automated browsers skip the splash unless a test asks for it (?splash)

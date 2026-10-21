@@ -30,6 +30,16 @@ Each player presses **jump** on their own device to join.
 | controller | left stick | A | X | Y | A / B | Start |
 | touch screen | ◀ ▶ on screen | A | B | ⇄ | A / B | II |
 
+**Testing alone? An AI partner.** Settings → **Playing alone: an AI plays the
+other one**. Join with one device and press jump again. You play one
+character; **switch** changes which one, and the AI takes the other. In a
+chapter it plays its half of the solved route and waits for you to do yours. If
+it gets stuck for about 20 seconds, it brings you both back to the flag and
+tries again; if that fails twice, it says so and just follows you and holds
+switches. In the Yard it follows you, holds still when you stand on its head and
+holds a nearby switch when you wait. Pause → **Watch the AI play it** plays both,
+to check a whole chapter. Offline only.
+
 **Switching characters.** On the title screen, press left or right to trade
 sides. In a level, **switch** hands the characters over between you (nobody
 moves). Playing alone? Join, then press jump again: one device plays both,
@@ -107,6 +117,7 @@ directly.
   - scripted bots that play **every chapter** through
   - solo negative controls proving each co-op gate needs both players
   - the Yard: walkable end to end, gates follow progress, a bot to every star with a solo control beside it, every toy played to a result, fuzz and render checks all over it
+  - the AI partner: it finishes every chapter by itself, recovers from falls and Back to checkpoint, gives up honestly when its plan can't fit, keeps up in the Yard, and plays the arcade games
   - the twist rooms: each needs both of you, and its trick is the way through, with a control beside every "can't"
   - a check that the renderer never touches game state
   - online lockstep, replaying a whole chapter through two laggy peers
