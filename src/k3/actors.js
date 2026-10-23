@@ -140,9 +140,9 @@ const antCache = new Map();
 function antGeos(kind) {
   if (antCache.has(kind)) return antCache.get(kind);
   const col = (ANT[kind] || ANT.ant).col, dk = darker(col), b = new Batch();
-  const P = (geo, c, m) => b.add('a', geo, m, c, null);
+  const P = (geo, c, m) => b.add('a', geo === G.sph ? SPH8 : geo, m, c, null);
   P(G.sph, col, L(0, 0.33, -0.33, 0.21, 0.19, 0.27, -0.25));                  // gaster
-  for (const z of [-0.24, -0.4]) P(torus(1, 0.09, TAU, 4, 22), dk, L(0, 0.34 - (z + 0.24) * 0.25, z, 0.2, 0.18 - (z === -0.4 ? 0.03 : 0), 0.2, -0.25));
+  for (const z of [-0.24, -0.4]) P(torus(1, 0.09, TAU, 3, 14), dk, L(0, 0.34 - (z + 0.24) * 0.25, z, 0.2, 0.18 - (z === -0.4 ? 0.03 : 0), 0.2, -0.25));
   P(G.sph, col, L(0, 0.27, -0.08, 0.065, 0.065, 0.07));                         // petiole
   P(G.sph, col, L(0, 0.28, 0.05, 0.11, 0.1, 0.15));                             // thorax
   P(G.sph, col, L(0, 0.35, 0.27, 0.17, 0.15, 0.16));                            // head
@@ -168,18 +168,20 @@ function antGeos(kind) {
   }
   const body = b.geometry('a');
   // legs: thigh up to a knee, shin down to the ground; one per side and position
-  const legs = [];
+  const tripods = [new Batch(), new Batch()];
   for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) {
-    const lb = new Batch(), dz = [0.16, 0, -0.16][i];
+    const lb = tripods[(i + (sx > 0 ? 1 : 0)) % 2], dz = [0.16, 0, -0.16][i];
+    const at = V(sx * 0.07, 0.27, [0.11, 0.04, -0.03][i]);
+    const add = (geo, m) => lb.add('l', geo, new THREE.Matrix4().makeTranslation(at.x, at.y, at.z).multiply(m), dk, null);
     const hind = kind === 'jumper' && i === 2;
     const knee = hind ? V(sx * 0.16, 0.3, -0.14) : V(sx * 0.2, 0.12, dz * 0.4);
     const foot = hind ? V(sx * 0.27, -0.27, -0.5) : V(sx * 0.33, -0.27, dz);
-    lb.add('l', G.cylLo, between(V(0, 0, 0), knee, hind ? 0.04 : 0.022), dk, null);
-    lb.add('l', G.sphLo, L(knee.x, knee.y, knee.z, hind ? 0.04 : 0.026), dk, null);
-    lb.add('l', G.cylLo, between(knee, foot, hind ? 0.022 : 0.018), dk, null);
-    lb.add('l', G.sphLo, L(foot.x, foot.y + 0.01, foot.z, 0.025, 0.02, 0.035), dk, null);
-    legs.push({ geo: lb.geometry('l'), sx, z: [0.11, 0.04, -0.03][i], i });
+    add(G.cylLo, between(V(0, 0, 0), knee, hind ? 0.04 : 0.022));
+    add(G.sphLo, L(knee.x, knee.y, knee.z, hind ? 0.04 : 0.026));
+    add(G.cylLo, between(knee, foot, hind ? 0.022 : 0.018));
+    add(G.sphLo, L(foot.x, foot.y + 0.01, foot.z, 0.025, 0.02, 0.035));
   }
+  const legs = tripods.map((t) => t.geometry('l'));
   // syrup: a glossy coat and drips that hang and stretch
   const cb = new Batch();
   cb.add('d', G.sph, L(0, 0, 0, 1, 1, 1), 0xffffff, null);
@@ -188,19 +190,17 @@ function antGeos(kind) {
   antCache.set(kind, out);
   return out;
 }
-const coatGeo = new THREE.SphereGeometry(1, 16, 12);
+const coatGeo = new THREE.SphereGeometry(1, 10, 7);
+const SPH8 = new THREE.SphereGeometry(1, 8, 6);
 const cubeGeo = (() => { const b = new Batch(); b.add('c', G.rb, L(0, 0, 0, 1), 0xffffff, null); return b.geometry('c'); })();
 export function makeAnt(kind, big = 1, T = {}) {
   const k = ANT[kind] ? kind : 'ant', geos = antGeos(k), s = (ANT[k].s) * big;
   const g = new THREE.Group(), lift = new THREE.Group(), sq = new THREE.Group();
   g.add(lift); lift.add(sq); sq.scale.setScalar(s);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: k === 'soldier' ? 0.25 : 0.32, metalness: k === 'soldier' ? 0.25 : 0.05, emissive: 0xffffff, emissiveIntensity: 0, envMap: T.env, envMapIntensity: 0.6 });
-  mesh(geos.body, mat, sq);
-  const legs = geos.legs.map((l) => {
-    const pv = new THREE.Group(); pv.position.set(l.sx * 0.07, 0.27, l.z); sq.add(pv);
-    mesh(l.geo, mat, pv);
-    return { pv, sx: l.sx, i: l.i };
-  });
+  const casts = big > 1;   // small ants make do with their soft blob
+  mesh(geos.body, mat, sq, 0, 0, 0, 1, 1, 1, casts);
+  const legs = geos.legs.map((geo) => mesh(geo, mat, sq, 0, 0, 0, 1, 1, 1, casts));   // two tripods of legs
   // syrup coat
   const coatMat = new THREE.MeshStandardMaterial({ color: 0xf08a24, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.6, envMap: T.env, envMapIntensity: 1.2, depthWrite: false });
   const coat = new THREE.Group(); sq.add(coat);
@@ -241,13 +241,11 @@ export function animateAnt(g, e, t, dt, still = false) {
   const moved = Math.hypot(e.x - u.lx, e.y - u.ly); u.lx = e.x; u.ly = e.y;
   u.phase += Math.min(moved, 1) * 9 / u.s + (still ? 0 : 0);
   const air = (e.hz || 0) > 0.01;
-  for (const l of u.legs) {
-    const tri = (l.i + (l.sx > 0 ? 1 : 0)) % 2 ? Math.PI : 0;   // two tripods
-    const ph = u.phase + tri;
-    if (air) { l.pv.rotation.set(0, 0, l.sx * 0.35); l.pv.rotation.y = l.i === 2 ? 0.5 * -l.sx : 0; continue; }
-    l.pv.rotation.y = Math.sin(ph) * 0.4 * -l.sx;
-    l.pv.rotation.z = l.sx * Math.max(0, Math.cos(ph)) * 0.3;
-  }
+  u.legs.forEach((m, i) => {   // the tripods take turns: one swings forward lifted, the other pushes back
+    const ph = u.phase + i * Math.PI;
+    if (air) { m.position.set(0, 0.05, -0.04); m.scale.set(1, 0.8, 1.15); return; }
+    m.position.set(0, Math.max(0, Math.cos(ph)) * 0.04, Math.sin(ph) * 0.07); m.scale.set(1, 1, 1);
+  });
   // a jumper crouches, then flies; everything else bobs as it walks
   const crouch = (e.crouch || 0) > 0 ? 1 : 0;
   u.lift.position.y = (e.hz || 0) + (moved > 0.001 && !air ? Math.abs(Math.sin(u.phase)) * 0.03 * u.s : 0);
@@ -275,7 +273,7 @@ export function animateAnt(g, e, t, dt, still = false) {
 
 export function makeNest(T) {
   const g = new THREE.Group();
-  const geo = new THREE.IcosahedronGeometry(1, 3), p = geo.attributes.position, R = rand(13);
+  const geo = new THREE.IcosahedronGeometry(1, 2), p = geo.attributes.position, R = rand(13);
   const cols = new Float32Array(p.count * 3), c = new THREE.Color();
   for (let i = 0; i < p.count; i++) {
     let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
@@ -293,7 +291,7 @@ export function makeNest(T) {
   }
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   const b = new Batch();
-  b.add('n', geo, new THREE.Matrix4(), 0xffffff, null);
+  b.add('n', geo, new THREE.Matrix4(), null, null);   // its own patchwork colours
   for (let i = 0; i < 22; i++) { const a = R() * TAU, r = 1.0 + R() * 0.7, s = 0.05 + R() * 0.08; b.add('n', G.crumb, L(Math.cos(a) * r, s * 0.5, Math.sin(a) * r, s, s * 0.7, s, R(), R(), R()), [0xb07a4a, 0x8a5a33, 0xd4a373][i % 3], null); }
   for (let i = 0; i < 7; i++) { const a = R() * TAU, r = 0.9 + R() * 0.8; b.add('n', G.rb, L(Math.cos(a) * r, 0.06, Math.sin(a) * r, 0.11, 0.11, 0.11, 0, R() * 3), 0xffffff, null); }
   b.add('n', G.crumb, L(0.55, 0.62, 0.55, 0.16, 0.14, 0.12, 0, 0.5), 0x2a1810, null);   // a side door
@@ -312,23 +310,22 @@ export function makeCake(T) {
   P(lathe([[0, 0], [2.3, 0], [2.4, 0.05], [2.35, 0.12], [0, 0.1]], 32), 0xf8f9fa, L());   // the cake stand plate
   P(G.cyl, 0xfff4e6, L(0, 0.6, 0, 1.9, 1.0, 1.9));
   P(G.cyl, 0xff8fab, L(0, 0.55, 0, 1.92, 0.12, 1.92));   // a jam layer
-  P(G.cyl, 0xfcc2d7, L(0, 1.5, 0, 1.4, 0.8, 1.4));
+  P(G.cyl, 0xffd6e5, L(0, 1.5, 0, 1.4, 0.8, 1.4));
   for (let i = 0; i < 18; i++) { const a = i / 18 * TAU, h = 0.18 + (i % 3) * 0.1; P(G.sph, 0xffffff, L(Math.cos(a) * 1.88, 1.08 - h * 0.5, Math.sin(a) * 1.88, 0.16, h, 0.12, 0, -a)); }   // icing drips
   for (let i = 0; i < 14; i++) { const a = i / 14 * TAU, h = 0.12 + (i % 2) * 0.1; P(G.sph, 0xffffff, L(Math.cos(a) * 1.38, 1.88 - h * 0.5, Math.sin(a) * 1.38, 0.13, h, 0.1, 0, -a)); }
-  for (let i = 0; i < 10; i++) { const a = i * 0.63; P(G.sph, 0xffffff, L(Math.cos(a) * 1.1, 1.95, Math.sin(a) * 1.1, 0.16, 0.12, 0.16)); P(G.cone, 0xe03131, L(Math.cos(a) * 1.1, 2.12, Math.sin(a) * 1.1, 0.12, 0.22, 0.12, Math.PI)); P(G.cone, 0x37b24d, L(Math.cos(a) * 1.1, 2.24, Math.sin(a) * 1.1, 0.08, 0.06, 0.08)); }
+  for (let i = 0; i < 10; i++) { const a = i * 0.63; P(G.sph, 0xffffff, L(Math.cos(a) * 1.1, 1.95, Math.sin(a) * 1.1, 0.16, 0.12, 0.16)); P(G.sph, 0xe03131, L(Math.cos(a) * 1.1, 2.1, Math.sin(a) * 1.1, 0.12, 0.15, 0.12)); P(G.cone, 0xe03131, L(Math.cos(a) * 1.1, 2.26, Math.sin(a) * 1.1, 0.1, 0.14, 0.1)); P(G.cone, 0x37b24d, L(Math.cos(a) * 1.1, 2.02, Math.sin(a) * 1.1, 0.1, 0.06, 0.1, Math.PI)); }
   const R = rand(4);
   for (let i = 0; i < 40; i++) { const a = R() * TAU, r = Math.sqrt(R()) * 1.2; P(G.cylLo, [0xff6b6b, 0xffd43b, 0x69db7c, 0x4dabf7, 0xda77f2][i % 5], L(Math.cos(a) * r, 1.91, Math.sin(a) * r, 0.03, 0.14, 0.03, Math.PI / 2, R() * 3)); }
   for (let i = 0; i < 6; i++) P(G.cyl, i % 2 ? 0xffffff : 0xff6b9d, L(0, 2.0 + i * 0.1, 0, 0.07, 0.1, 0.07));   // a striped candle
-  mesh(b.geometry('c'), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }), g);
+  mesh(b.geometry('c'), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, emissive: 0x5a3020, emissiveIntensity: 0.35 }), g);
   const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.glow, color: 0xffb347, blending: THREE.AdditiveBlending, depthWrite: false })); flame.scale.set(0.8, 1.1, 1); flame.position.y = 2.8; g.add(flame);
   const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.glow, color: 0xfff3bf, blending: THREE.AdditiveBlending, depthWrite: false })); core.scale.set(0.25, 0.45, 1); core.position.y = 2.72; g.add(core);
-  const light = new THREE.PointLight(0xffb347, 8, 7, 1.8); light.position.y = 2.9; g.add(light);
-  g.userData = { flame, core, light };
+  g.userData = { flame, core };
   return g;
 }
 export function animateCake(g, t) {
   const u = g.userData, f = 1 + Math.sin(t * 13) * 0.08 + Math.sin(t * 7.3) * 0.05;
-  u.flame.scale.set(0.8 * f, 1.1 * f, 1); u.core.position.x = Math.sin(t * 9) * 0.02; u.light.intensity = 8 * f;
+  u.flame.scale.set(0.8 * f, 1.1 * f, 1); u.core.position.x = Math.sin(t * 9) * 0.02;
 }
 
 // ---------------------------------------------------------------- the kettle
@@ -339,7 +336,7 @@ export function makeKettle(T) {
   const enamel = std(0xe03131, { roughness: 0.18, envMap: T.env, envMapIntensity: 0.9 }), black = std(0x2b2b33, { roughness: 0.4 }), chrome = std(0xdee2e6, { roughness: 0.2, metalness: 0.9, envMap: T.env, envMapIntensity: 1.2 });
   mesh(lathe([[0, 0], [0.9, 0], [1.0, 0.08], [1.08, 0.5], [1.0, 1.0], [0.7, 1.38], [0.38, 1.5], [0, 1.5]], 28), enamel, body);
   mesh(G.cyl, chrome, body, 0, 0.04, 0, 0.92, 0.08, 0.92);
-  mesh(G.cyl, std(0xffffff, { roughness: 0.3 }), body, 0, 0.62, 0, 1.075, 0.12, 1.075);
+  mesh(G.cyl, std(0xffffff, { roughness: 0.3 }), body, 0, 0.5, 0, 1.09, 0.1, 1.09);
   const lid = new THREE.Group(); lid.position.y = 1.5; body.add(lid);
   mesh(G.cyl, chrome, lid, 0, 0, 0, 0.4, 0.06, 0.4); mesh(G.sph, black, lid, 0, 0.1, 0, 0.13, 0.11, 0.13);
   const handle = mesh(torus(0.62, 0.075, Math.PI, 8, 18), black, body, 0, 1.3, 0); handle.rotation.y = Math.PI / 2;
@@ -348,7 +345,7 @@ export function makeKettle(T) {
   const ring = mesh(torus(1.15, 0.08, TAU, 6, 32), new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: 0 }), g, 0, 0.02, 0, 1, 1, 1, false); ring.rotation.x = Math.PI / 2;
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.glow, color: 0xff7a2a, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 })); glow.scale.set(3.5, 1.2, 1); glow.position.y = 0.2; g.add(glow);
   const puffs = [];
-  for (let i = 0; i < STEAM_N; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.puff, color: 0xffffff, transparent: true, depthWrite: false, opacity: 0 })); g.add(s); puffs.push(s); }
+  for (let i = 0; i < STEAM_N; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.puff, color: 0xffffff, transparent: true, depthWrite: false, opacity: 0, toneMapped: false })); g.add(s); puffs.push(s); }
   g.userData = { body, lid, ring, glow, puffs, heat: 0 };
   return g;
 }
@@ -368,8 +365,8 @@ export function animateKettle(g, k, t, dt) {
     let x, y, z, sc, a;
     if (st === 'steam') {
       const life = (t * 0.45 + i / STEAM_N) % 1, ang = i * 2.39996 + t * 0.6, r = 0.25 + life * 1.1;
-      x = Math.cos(ang) * r; z = Math.sin(ang) * r; y = 1.6 + life * 11.5; sc = 1.1 + life * 2.4;
-      a = 0.6 * Math.pow(Math.sin(Math.PI * Math.min(1, life * 1.15)), 0.6) * (1 - life * 0.45);
+      x = Math.cos(ang) * r; z = Math.sin(ang) * r; y = 1.6 + life * 11.5; sc = 1.0 + life * 1.9;
+      a = 0.6 * Math.pow(Math.sin(Math.PI * Math.min(1, life * 1.15)), 0.6) * (1 - life * 0.4);
     } else if (st === 'whistle') {
       const life = (t * 1.6 + i / STEAM_N * 3) % 1;
       x = 1.6 + life * 1.2; y = 1.4 + life * 1.4 + Math.sin(i) * 0.1; z = Math.sin(i * 1.7) * 0.15 * life; sc = 0.25 + life * 0.9; a = i < STEAM_N / 2 ? 0.55 * (1 - life) : 0;
@@ -379,7 +376,16 @@ export function animateKettle(g, k, t, dt) {
     }
     s.visible = a > 0.01;
     if (!s.visible) continue;
-    s.position.set(x, y, z); s.scale.set(sc, sc, 1); m.opacity = a;
+    s.position.set(x, y, z); s.scale.set(sc, sc, 1); m.opacity = a; s.userData.a = a;
+  }
+}
+// per view: thin out the puffs right in front of that camera, so riding the steam doesn't white out the screen
+const _w = new THREE.Vector3();
+export function fadeSteamNear(g, cam) {
+  for (const s of g.userData.puffs) {
+    if (!s.visible) continue;
+    const d = s.getWorldPosition(_w).distanceTo(cam.position);
+    s.material.opacity = (s.userData.a || 0) * Math.min(1, Math.max(0.08, (d - 1.5) / 5));
   }
 }
 

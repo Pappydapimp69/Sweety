@@ -32,7 +32,6 @@ box(47, 2.5, 0, 50, 5, 1.5, 'chair');
 box(54, 34, 0, 64, 44, 10, 'fridge');
 box(12, 4, 0, 14.5, 6.5, 1.2, 'stool');
 box(36, 26, 0, 38.5, 28, 2.2, 'cereal');
-box(8.5, 30, 4, 10.5, 32, 6.2, 'cereal');   // on the west counter: a step toward nothing in particular
 // the east run: a long counter with the sink, along the east wall (top 4)
 box(92, 8, 0, 100, 62, 4, 'counter');
 box(94, 28, 4, 99, 36, 4.1, 'sink');
@@ -84,7 +83,7 @@ ent({ type: 'sign', x: 90, y: 50, z: 0, text: 'The toaster pops anything that st
 for (const [x, y, z] of [
   [3, 3, 0], [97, 3, 0], [3, 66, 0], [60, 66, 0], [49, 11, 0], [45, 8, 0], [53, 15, 0],   // corners, under the table
   [39.7, 11, 1.5], [37.2, 27, 2.2], [71, 31.5, 1.6], [77.5, 25.5, 1.6], [72, 45, 2.4], [65, 54.5, 3],   // on things
-  [21, 17, 4], [33, 22, 4], [3, 14, 4], [9.5, 31, 6.2], [40, 43, 4], [97, 12, 4], [97, 32, 4.1],   // counters and the island
+  [21, 17, 4], [33, 22, 4], [3, 14, 4], [4, 31, 4], [40, 43, 4], [97, 12, 4], [97, 32, 4.1],   // counters and the island
   [20, 63, 2], [40, 65, 4], [19, 67, 6], [41, 69, 8], [62, 42, 10],   // the shelf and the fridge
   [12, 43, 11.5], [24, 43, 11.5], [38, 43, 11.5], [50, 43, 11.5], [96, 60, 12.6],   // the secret heights
 ]) ent({ type: 'sprinkle', x, y, z: z + 0.6 });

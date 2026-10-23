@@ -7,45 +7,56 @@
 import * as THREE from '../vendor/three/three.module.min.js';
 import { K, lights, queenOf } from './sim.js';
 import { buildKitchen, makeEnv, glowTex, blobTex, puffTex, vignetteTex } from './props.js';
-import { makePlayer, animatePlayer, makeAnt, animateAnt, makeNest, makeCake, animateCake, makeKettle, animateKettle, makeSprinkle, animateSprinkle, makeHole } from './actors.js';
+import { makePlayer, animatePlayer, makeAnt, animateAnt, makeNest, makeCake, animateCake, makeKettle, animateKettle, makeSprinkle, animateSprinkle, makeHole, fadeSteamNear } from './actors.js';
 
 const v3 = (x, y, z) => new THREE.Vector3(x, z, -y);
 const TAU = Math.PI * 2;
 const CEIL = 28;
 
-export function createK3View(canvas) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+// a software rasteriser (headless tests, old machines) gets a lighter pass: no MSAA, a smaller shadow map
+function softwareGL() {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2'), ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+    const name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '';
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return /swiftshader|llvmpipe|softpipe|software/i.test(name);
+  } catch { return false; }
+}
+
+export function createK3View(canvas, opts = {}) {
+  const lite = opts.lite ?? softwareGL();
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: opts.antialias ?? !lite, alpha: false });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = lite ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   renderer.shadowMap.autoUpdate = false;   // once a frame, shared by both halves
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1c1420);
-  scene.fog = new THREE.Fog(0x24181f, 70, 170);
+  scene.background = new THREE.Color(0x161526);
+  scene.fog = new THREE.Fog(0x1d1a2c, 55, 150);
   const T = { glow: glowTex(), blob: blobTex(), puff: puffTex(), env: makeEnv(renderer) };
 
   // lights: a warm key from above (the one shadow), cool moonlight from the window, a
   // pendant lamp over the table, a soft fill; fires for the dark
-  const hemi = new THREE.HemisphereLight(0xffe2c4, 0x3b2a33, 0.6); scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xffd7a8, 1.55);
+  const hemi = new THREE.HemisphereLight(0xcfc6e6, 0x4a3530, 0.75); scene.add(hemi);
+  const key = new THREE.DirectionalLight(0xffcf96, 1.05);
   key.position.copy(v3(30, 12, 80)); key.target.position.copy(v3(50, 35, 0));
-  key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.03;
+  key.castShadow = true; key.shadow.mapSize.set(lite ? 1024 : 2048, lite ? 1024 : 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.03;
   Object.assign(key.shadow.camera, { left: -72, right: 72, top: 62, bottom: -62, near: 10, far: 190 });
   scene.add(key, key.target);
-  const moon = new THREE.DirectionalLight(0x8ea6ff, 0.6);
+  const moon = new THREE.DirectionalLight(0x8ea6ff, 0.7);
   moon.position.copy(v3(56, 120, 75)); moon.target.position.copy(v3(56, 40, 0)); scene.add(moon, moon.target);
-  const lamp = new THREE.PointLight(0xffb066, 120, 70, 1.5); scene.add(lamp);
-  const fires = Array.from({ length: 6 }, () => { const l = new THREE.PointLight(0xff8c2a, 0, 9, 1.5); scene.add(l); return l; });
+  const lamp = new THREE.PointLight(0xffa955, 260, 80, 1.6); scene.add(lamp);
+  const fires = Array.from({ length: 2 }, () => { const l = new THREE.PointLight(0xff8c2a, 0, 9, 1.5); scene.add(l); return l; });
 
-  const built = { boxes: null, room: null };
+  const built = { boxes: null, room: null }, lampPos = new THREE.Vector3();
   const statics = new THREE.Group(); scene.add(statics);
   function buildRoom(s) {
     built.boxes = s.boxes;
     statics.clear();
     built.room = buildKitchen(s, statics, T.env);
     const la = built.room.lampAt;
-    lamp.position.copy(v3(la.x, la.y, la.z - 0.2));
+    lampPos.copy(v3(la.x, la.y, la.z - 0.2)); lamp.position.copy(lampPos);
   }
 
   // ---------------------------------------------------------------- pooled things
@@ -72,7 +83,7 @@ export function createK3View(canvas) {
     for (let i = 0; i <= 40; i++) { const a = i / 40 * TAU, r = 1 + 0.08 * Math.sin(a * 3) + 0.05 * Math.sin(a * 7 + 1); if (i) sh.lineTo(Math.cos(a) * r, Math.sin(a) * r); else sh.moveTo(r, 0); }
     return new THREE.ShapeGeometry(sh, 2).rotateX(-Math.PI / 2);
   })();
-  const puddleMat = std(0xe8590c, { roughness: 0.05, metalness: 0.15, envMap: T.env, envMapIntensity: 1.3, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const puddleMat = std(0xf3902a, { roughness: 0.06, metalness: 0, emissive: 0x7a3300, emissiveIntensity: 0.55, envMap: T.env, envMapIntensity: 1.0, transparent: true, opacity: 0.92, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const burnMat = std(0x7a3b10, { emissive: 0xff7b00, emissiveIntensity: 1.2, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const flameMat = new THREE.SpriteMaterial({ map: T.glow, color: 0xff9a2a, blending: THREE.AdditiveBlending, depthWrite: false });
   const sparkMat = new THREE.SpriteMaterial({ map: T.glow, color: 0xfff3a0, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -98,11 +109,15 @@ export function createK3View(canvas) {
     // the dark: the lamp and the key go down (fading), the moon stays, fires come up
     darkK += ((s.dark ? 1 : 0) - darkK) * Math.min(1, dt * 2.5);
     const on = 1 - darkK;
-    hemi.intensity = 0.15 + 0.45 * on; key.intensity = 0.12 + 1.43 * on; lamp.intensity = 120 * on * (1 + Math.sin(t * 2.1) * 0.01);
-    moon.intensity = 0.6 + 0.25 * darkK;
+    hemi.intensity = 0.2 + 0.55 * on; key.intensity = 0.08 + 0.97 * on; lamp.intensity = 260 * on;
+    moon.intensity = 0.7 + 0.2 * darkK;
     renderer.toneMappingExposure = 1.08 + darkK * 0.15;
+    // burning puddles light the room; with the lamp out, its light lends a hand as a third fire
     const ls = lights(s).filter((l) => l[3] > 3.5);
     fires.forEach((l, i) => { const f = ls[i]; l.intensity = f ? 30 + Math.sin(t * 17 + i) * 6 : 0; if (f) l.position.copy(v3(f[0], f[1], f[2] + 0.6)); });
+    const f3 = darkK > 0.6 && ls[2];
+    if (f3) { lamp.color.setHex(0xff8c2a); lamp.distance = 9; lamp.decay = 1.5; lamp.intensity = 30 + Math.sin(t * 17 + 2) * 6; lamp.position.copy(v3(f3[0], f3[1], f3[2] + 0.6)); }
+    else { lamp.color.setHex(0xffa955); lamp.distance = 80; lamp.decay = 1.6; lamp.position.copy(lampPos); }
     built.room.update(t, on);
 
     for (const p of s.players) {
@@ -253,6 +268,7 @@ export function createK3View(canvas) {
       const x = i ? half : 0, w = i ? W - half : half;
       aimCam(s, cams[i], s.players[i], w / H, punch);
       renderer.setViewport(x, 0, w, H); renderer.setScissor(x, 0, w, H);
+      for (const [k, o] of pool) if (o.visible && k[0] === 'k' && o.userData.puffs) fadeSteamNear(o, cams[i].cam);
       renderer.render(scene, cams[i].cam);
       renderer.autoClear = false; renderer.render(vigScene, vigCam); renderer.autoClear = true;
     }
@@ -265,5 +281,5 @@ export function createK3View(canvas) {
     const half = Math.floor(W / 2), w = i ? W - half : half;
     return [(i ? half : 0) + (v.x + 1) / 2 * w, (1 - v.y) / 2 * H];
   }
-  return { draw, project };
+  return { draw, project, debug: { renderer, scene, statics, snap: () => cams.forEach((c) => { c.init = false; }) } };
 }

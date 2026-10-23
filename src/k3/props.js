@@ -72,7 +72,7 @@ function planksTex() {
     let y = start;
     while (y < start + 1024) {
       const L = Math.min(260 + R() * 380, start + 1024 - y);
-      const h = 27 + R() * 8, s = 42 + R() * 14, l = 38 + R() * 11;
+      const h = 26 + R() * 7, s = 30 + R() * 10, l = 37 + R() * 8;
       const knots = Array.from({ length: 16 }, () => [R() * W, (R() - 0.5) * 12, (R() - 0.5) * 8, 0.04 + R() * 0.09, 0.6 + R() * 1.3]);
       plank(i * W, y, L, h, s, l, knots); plank(i * W, y - 1024, L, h, s, l, knots);
       if (R() < 0.3) {   // a knot
@@ -157,22 +157,31 @@ function rugTex() {
   let r = 254, k = 0;
   while (r > 6) {
     const w = 17;
-    g.fillStyle = cols[k % cols.length]; g.beginPath(); g.arc(256, 256, r, 0, TAU); g.arc(256, 256, Math.max(0, r - w), 0, TAU, true); g.fill();
+      g.fillStyle = cols[k % cols.length]; g.beginPath(); g.arc(256, 256, r, 0, TAU); g.arc(256, 256, Math.max(0, r - w), 0, TAU, true); g.fill();
     const n = Math.max(8, Math.round(r * TAU / 10));
     for (let i = 0; i < n; i++) {   // the braid
       const a = i / n * TAU, sgn = i % 2 ? 1 : -1;
       g.strokeStyle = 'rgba(40,15,10,0.28)'; g.lineWidth = 1.6;
       g.beginPath(); g.moveTo(256 + Math.cos(a) * (r - 2), 256 + Math.sin(a) * (r - 2)); g.lineTo(256 + Math.cos(a + sgn * 0.6 * 10 / r) * (r - w + 2), 256 + Math.sin(a + sgn * 0.6 * 10 / r) * (r - w + 2)); g.stroke();
     }
-    g.strokeStyle = 'rgba(40,15,10,0.35)'; g.lineWidth = 1.5; g.beginPath(); g.arc(256, 256, r - w, 0, TAU); g.stroke();
+    if (r - w > 1) { g.strokeStyle = 'rgba(40,15,10,0.35)'; g.lineWidth = 1.5; g.beginPath(); g.arc(256, 256, r - w, 0, TAU); g.stroke(); }
     r -= w; k++;
   }
   return asTex(c, false);
 }
-function ginghamTex(col = '200,50,60') {
+function runnerTex() {   // a woven kitchen runner, warm stripes
+  const [c, g] = cv(64, 256);
+  const cols = ['#7a2f2a', '#c9873e', '#efe0c0', '#3f5f6e', '#efe0c0', '#c9873e'];
+  for (let y = 0; y < 256; y += 16) { g.fillStyle = cols[(y / 16) % cols.length]; g.fillRect(0, y, 64, 16); }
+  g.fillStyle = '#7a2f2a'; g.fillRect(0, 0, 6, 256); g.fillRect(58, 0, 6, 256);
+  for (let y = 0; y < 256; y += 3) { g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(0, y, 64, 1); }
+  for (let x = 0; x < 64; x += 3) { g.fillStyle = 'rgba(255,255,255,0.05)'; g.fillRect(x, 0, 1, 256); }
+  return asTex(c);
+}
+function ginghamTex(col = '196,44,40') {
   const [c, g] = cv(64);
   g.fillStyle = '#fbf6ee'; g.fillRect(0, 0, 64, 64);
-  g.fillStyle = `rgba(${col},0.45)`; g.fillRect(0, 0, 32, 64); g.fillRect(0, 0, 64, 32);
+  g.fillStyle = `rgba(${col},0.5)`; g.fillRect(0, 0, 32, 64); g.fillRect(0, 0, 64, 32);
   g.fillStyle = 'rgba(255,255,255,0.05)'; for (let i = 0; i < 64; i += 2) g.fillRect(0, i, 64, 1);
   return asTex(c);
 }
@@ -272,7 +281,7 @@ function labelTex(text, bg, fg) {
   const [c, g] = cv(256, 64);
   g.fillStyle = bg; g.fillRect(0, 0, 256, 64);
   g.strokeStyle = fg; g.lineWidth = 3; g.strokeRect(6, 6, 244, 52);
-  g.fillStyle = fg; g.font = 'bold 38px serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 34);
+  g.fillStyle = fg; g.font = `bold ${Math.min(38, Math.floor(440 / text.length))}px serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 34);
   return asTex(c, false);
 }
 
@@ -280,7 +289,7 @@ function labelTex(text, bg, fg) {
 
 // a box with rounded edges (r in units), UVs as a box's
 const rbCache = new Map();
-export function roundedBox(w, h, d, r, m = 2) {
+export function roundedBox(w, h, d, r, m = 1) {
   const key = `${w}|${h}|${d}|${r}|${m}`;
   if (rbCache.has(key)) return rbCache.get(key);
   r = Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3);
@@ -311,11 +320,12 @@ export const lathe = (pts, seg = 20) => new THREE.LatheGeometry(pts.map(([r, y])
 
 export const G = {
   box: new THREE.BoxGeometry(1, 1, 1),
-  sph: new THREE.SphereGeometry(1, 14, 10),
-  sphLo: new THREE.SphereGeometry(1, 8, 6),
-  hemi: new THREE.SphereGeometry(1, 14, 6, 0, TAU, 0, Math.PI / 2),
-  cyl: new THREE.CylinderGeometry(1, 1, 1, 18),
-  cylLo: new THREE.CylinderGeometry(1, 1, 1, 8),
+  sph: new THREE.SphereGeometry(1, 10, 7),
+  sphLo: new THREE.SphereGeometry(1, 6, 4),
+  hemi: new THREE.SphereGeometry(1, 10, 4, 0, TAU, 0, Math.PI / 2),
+  cyl: new THREE.CylinderGeometry(1, 1, 1, 12),
+  cylLo: new THREE.CylinderGeometry(1, 1, 1, 6),
+  boxy: new THREE.BoxGeometry(1, 1, 1),
   cone: new THREE.ConeGeometry(1, 1, 12),
   tri: new THREE.CylinderGeometry(1, 1, 1, 3),
   disc: new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2),
@@ -356,12 +366,16 @@ const PROF = {
 
 const _p = new THREE.Vector3(), _n = new THREE.Vector3(), _nm = new THREE.Matrix3(), _c = new THREE.Color();
 export class Batch {
-  constructor() { this.keys = new Map(); }
+  constructor(cell = 0) { this.keys = new Map(); this.cell = cell; }
+  // with a cell size, pieces are also split by where they stand (so a view can skip what it can't see)
   add(key, geo, m, color, ao, alpha = 1) {
+    if (this.cell) key = `${key}@${Math.floor(m.elements[12] / this.cell)},${Math.floor(m.elements[14] / this.cell)}`;
     let L = this.keys.get(key); if (!L) this.keys.set(key, L = []);
     L.push([geo, m, color, ao, alpha]);
   }
   // one geometry from every piece under a key; `tri` > 0 projects UVs from world space (units per repeat = 1/tri)
+  // the keys that start `key` (cells of it)
+  cells(key) { return [...this.keys.keys()].filter((k) => k === key || k.startsWith(key + '@')); }
   geometry(key, tri = 0, alpha = false) {
     const L = this.keys.get(key); if (!L) return null;
     let nv = 0, ni = 0;
@@ -372,7 +386,8 @@ export class Batch {
     let vo = 0, io = 0;
     for (const [g, m, color, ao, a] of L) {
       _nm.getNormalMatrix(m);
-      _c.set(color);
+      const own = color == null ? g.attributes.color : null;   // no colour given: keep the geometry's own
+      if (!own) _c.set(color);
       const P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv;
       for (let i = 0; i < P.count; i++) {
         _p.fromBufferAttribute(P, i).applyMatrix4(m);
@@ -386,6 +401,7 @@ export class Batch {
           if (ay >= ax && ay >= az) { u = _p.x; v = _p.z; } else if (ax >= az) { u = _p.z; v = _p.y; } else { u = _p.x; v = _p.y; }
           uv[o * 2] = u * tri; uv[o * 2 + 1] = v * tri;
         } else if (U) { uv[o * 2] = U.getX(i); uv[o * 2 + 1] = U.getY(i); }
+        if (own) _c.setRGB(own.getX(i), own.getY(i), own.getZ(i));
         let k = 1;
         if (ao != null) { const h = _p.y - ao; if (h < 0.45) k = 0.5 + 0.5 * Math.max(0, h) / 0.45; }
         col[o * cs] = _c.r * k; col[o * cs + 1] = _c.g * k; col[o * cs + 2] = _c.b * k;
@@ -588,7 +604,7 @@ export function buildKitchen(s, group, env) {
     planks: planksTex(), grain: grainTex(1, 5), paintGrain: grainTex(0.35, 6), marble: marbleTex(), tiles: tilesTex(), paper: wallpaperTex(),
     rug: rugTex(), gingham: ginghamTex(), ginghamBlue: ginghamTex('70,110,170'), sky: skyTex(), patch: windowPatchTex(), spice: spiceRowTex(), clock: clockTex(), drawing: drawingTex(), blob: blobTex(), glow: glowTex(),
   };
-  const b = new Batch();
+  const b = new Batch(25), d = new Batch(25);   // the furniture (casts shadows), the small things (don't)
   const blobs = new Batch(), glows = new Batch();
   const RW = s.room.w, RD = s.room.d, CEIL = 28;
   const boxes = s.boxes;
@@ -597,8 +613,8 @@ export function buildKitchen(s, group, env) {
   const rbox = (key, x0, y0, z0, x1, y1, z1, r, color, ao = null) => b.add(key, roundedBox(+(x1 - x0).toFixed(3), +(z1 - z0).toFixed(3), +(y1 - y0).toFixed(3), r), new THREE.Matrix4().makeTranslation(v3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)), color, ao);
   const blob = (x, y, z, rx, ry = rx, a = 0.5) => blobs.add('blob', G.quad, new THREE.Matrix4().compose(v3(x, y, z + 0.012), _q.identity(), _s.set(rx * 2, 1, ry * 2)), 0x000000, null, a);
   const glow = (x, y, z, rx, ry, col, a = 1) => glows.add('glow', G.quad, new THREE.Matrix4().compose(v3(x, y, z + 0.02), _q.identity(), _s.set(rx * 2, 1, ry * 2)), col, null, a);
-  const P = (x, y, z, rot = 0, sc = 1) => placer(b, x, y, z, rot, sc);
-  const C = { paint: 0x7f9cba, paintDark: 0x6a86a3, walnut: 0x8a5a3c, oak: 0xc89462, trim: 0xf3ead8, handle: PAL.brass };
+  const P = (x, y, z, rot = 0, sc = 1) => placer(d, x, y, z, rot, sc);
+  const C = { paint: 0xa3bdb0, paintDark: 0x8ea898, walnut: 0x8a5a3c, oak: 0xc89462, trim: 0xf3ead8, handle: PAL.brass };
 
   // ---- the floor, the walls, the ceiling
   box('planks', -1, -1, -0.5, RW + 1, RD + 1, 0, 0xffffff);
@@ -687,7 +703,8 @@ export function buildKitchen(s, group, env) {
     const [cx, cy] = f === 'S' || f === 'N' ? [(a + c) / 2, at + (f === 'S' ? -out / 2 : out / 2)] : [at + (f === 'W' ? -out / 2 : out / 2), (a + c) / 2];
     const w = c - a;
     const [sx, sy] = f === 'S' || f === 'N' ? [w, out] : [out, w];
-    b.add(key, roundedBox(+sx.toFixed(3), +(z1 - z0).toFixed(3), +sy.toFixed(3), Math.min(r, out * 0.49)), new THREE.Matrix4().makeTranslation(v3(cx, cy, (z0 + z1) / 2)), color, null);
+    const geo = r > 0 ? roundedBox(+sx.toFixed(3), +(z1 - z0).toFixed(3), +sy.toFixed(3), Math.min(r, out * 0.49)) : G.boxy;
+    d.add(key, geo, r > 0 ? new THREE.Matrix4().makeTranslation(v3(cx, cy, (z0 + z1) / 2)) : new THREE.Matrix4().compose(v3(cx, cy, (z0 + z1) / 2), _q.identity(), _s.set(sx, z1 - z0, sy)), color, null);
   };
   const handleOn = (f, at, a, z, horiz, len = 0.9) => {
     const o = 0.18, [cx, cy] = f === 'S' || f === 'N' ? [a, at + (f === 'S' ? -o : o)] : [at + (f === 'W' ? -o : o), a];
@@ -695,16 +712,11 @@ export function buildKitchen(s, group, env) {
     let m;
     if (horiz) m = new THREE.Matrix4().compose(v3(cx, cy, z), _q.setFromAxisAngle(new THREE.Vector3(along === 'x' ? 0 : 1, 0, along === 'x' ? 1 : 0), Math.PI / 2), _s.set(0.06, len, 0.06));
     else m = new THREE.Matrix4().compose(v3(cx, cy, z), _q.identity(), _s.set(0.06, len, 0.06));
-    b.add('metal', G.cyl, m, C.handle, null);
-    for (const k of [-1, 1]) {   // its two feet
-      const [dx, dy, dz] = horiz ? (along === 'x' ? [k * len * 0.4, 0, 0] : [0, k * len * 0.4, 0]) : [0, 0, k * len * 0.4];
-      const [ox, oy] = f === 'S' ? [0, 0.08] : f === 'N' ? [0, -0.08] : f === 'W' ? [0.08, 0] : [-0.08, 0];
-      b.add('metal', G.sphLo, new THREE.Matrix4().compose(v3(cx + dx + ox, cy + dy + oy, z + dz), _q.identity(), _s.set(0.06, 0.06, 0.06)), C.handle, null);
-    }
+    d.add('metal', G.cylLo, m, C.handle, null);
   };
   const knobOn = (f, at, a, z, col = C.handle) => {
     const o = 0.14, [cx, cy] = f === 'S' || f === 'N' ? [a, at + (f === 'S' ? -o : o)] : [at + (f === 'W' ? -o : o), a];
-    b.add('metal', G.sph, new THREE.Matrix4().compose(v3(cx, cy, z), _q.identity(), _s.set(0.13, 0.13, 0.13)), col, null);
+    d.add('metal', G.sphLo, new THREE.Matrix4().compose(v3(cx, cy, z), _q.identity(), _s.set(0.13, 0.13, 0.13)), col, null);
   };
   const stove = boxes.find((q) => q[6] === 'stove');
   const cabinetRun = (q, paint, opts = {}) => {
@@ -732,7 +744,7 @@ export function buildKitchen(s, group, env) {
           const da = a + i * w + 0.07, dc = a + (i + 1) * w - 0.07, mid = (da + dc) / 2;
           const dz0 = z0 + kick + 0.08, dzMid = z1 - top - 1.05, dz1 = z1 - top - 0.08;
           facePanel('paint', f, at, da, dc, dz0, dzMid - 0.08, 0.1, paint);   // the door
-          facePanel('paint', f, at - 0.1 * (f === 'S' || f === 'W' ? 1 : -1), da + 0.32, dc - 0.32, dz0 + 0.3, dzMid - 0.38, 0.05, opts.inner ?? C.paintDark);   // its panel
+          facePanel('paint', f, at - 0.1 * (f === 'S' || f === 'W' ? 1 : -1), da + 0.32, dc - 0.32, dz0 + 0.3, dzMid - 0.38, 0.05, opts.inner ?? C.paintDark, 0);   // its panel
           facePanel('paint', f, at, da, dc, dzMid, dz1, 0.1, paint);   // the drawer
           handleOn(f, at, mid, (dzMid + dz1) / 2, true, Math.min(1.1, w * 0.35));
           knobOn(f, at, i % 2 ? da + 0.45 : dc - 0.45, dzMid - 0.55);
@@ -756,8 +768,8 @@ export function buildKitchen(s, group, env) {
         for (let i = 0; i < n; i++) {
           const da = a + i * w + 0.08, dc = a + (i + 1) * w - 0.08;
           facePanel('paint', f, at, da, dc, z0 + 0.6, z1 - 0.45, 0.1, C.paint);
-          facePanel('paint', f, at - 0.1 * (f === 'S' || f === 'W' ? 1 : -1), da + 0.4, dc - 0.4, z0 + 1.0, (z0 + z1) / 2 - 0.2, 0.05, C.paintDark);
-          facePanel('paint', f, at - 0.1 * (f === 'S' || f === 'W' ? 1 : -1), da + 0.4, dc - 0.4, (z0 + z1) / 2 + 0.2, z1 - 0.85, 0.05, C.paintDark);
+          facePanel('paint', f, at - 0.1 * (f === 'S' || f === 'W' ? 1 : -1), da + 0.4, dc - 0.4, z0 + 1.0, (z0 + z1) / 2 - 0.2, 0.05, C.paintDark, 0);
+          facePanel('paint', f, at - 0.1 * (f === 'S' || f === 'W' ? 1 : -1), da + 0.4, dc - 0.4, (z0 + z1) / 2 + 0.2, z1 - 0.85, 0.05, C.paintDark, 0);
           knobOn(f, at, i % 2 ? da + 0.5 : dc - 0.5, (z0 + z1) / 2);
         }
       }
@@ -775,9 +787,9 @@ export function buildKitchen(s, group, env) {
           b.add('metal', G.box, new THREE.Matrix4().compose(v3(atWall + dir * 0.75, yy, z0 - 0.7), _q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), dir * Math.PI / 4), _s.set(0.08, 1.9, 0.1)), 0x3a3a44, null);
         }
         const bx = x1 >= RW - 0.01 ? x1 - 0.7 : x0 + 0.7;
-        books(placer(b, bx, y1 - 0.6, z1, x1 >= RW - 0.01 ? -Math.PI / 2 : Math.PI / 2), 6, 77);
-        jar(placer(b, bx, y0 + 1.6, z1), 0, 0, 0.9, 0.32, 0xe9c46a, PAL.brass);
-        jar(placer(b, bx, y0 + 2.4, z1), 0, 0, 0.7, 0.28, 0x8d5524, 0x3a3a44);
+        books(placer(d, bx, y1 - 0.6, z1, x1 >= RW - 0.01 ? -Math.PI / 2 : Math.PI / 2), 6, 77);
+        jar(placer(d, bx, y0 + 1.6, z1), 0, 0, 0.9, 0.32, 0xe9c46a, PAL.brass);
+        jar(placer(d, bx, y0 + 2.4, z1), 0, 0, 0.7, 0.28, 0x8d5524, 0x3a3a44);
         continue;
       }
       // upper cupboards: doors on the faces you see, an under-light, hung from the ceiling
@@ -788,7 +800,7 @@ export function buildKitchen(s, group, env) {
         for (let i = 0; i < n; i++) {
           const da = a + i * w + 0.07, dc = a + (i + 1) * w - 0.07;
           facePanel('paint', f, at, da, dc, z0 + 0.08, z1 - 0.24, 0.1, C.paint);
-          facePanel('paint', f, at - 0.1 * (f === 'S' || f === 'W' ? 1 : -1), da + 0.3, dc - 0.3, z0 + 0.3, z1 - 0.46, 0.05, C.paintDark);
+          facePanel('paint', f, at - 0.1 * (f === 'S' || f === 'W' ? 1 : -1), da + 0.3, dc - 0.3, z0 + 0.3, z1 - 0.46, 0.05, C.paintDark, 0);
           knobOn(f, at, i % 2 ? da + 0.4 : dc - 0.4, z0 + 0.45);
         }
       }
@@ -807,7 +819,8 @@ export function buildKitchen(s, group, env) {
       cl.position.copy(v3(cx, cy, z1 - 0.02)); cl.receiveShadow = true; group.add(cl);
       for (const [f, a, c] of [['S', x0, x1], ['N', x0, x1], ['W', y0, y1], ['E', y0, y1]]) {
         const at = { S: y0 - 0.12, N: y1 + 0.12, W: x0 - 0.12, E: x1 + 0.12 }[f], len = c - a + 0.24;
-        const drape = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.9, 20, 1), cl.material);
+        const dt = T.gingham.clone(); dt.needsUpdate = true; dt.repeat.set(len / 1.2, 0.9 / 1.2);
+        const drape = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.9, 20, 1), new THREE.MeshStandardMaterial({ map: dt, roughness: 0.85, side: THREE.DoubleSide }));
         const pp = drape.geometry.attributes.position;
         for (let i = 0; i < pp.count; i++) pp.setZ(i, (pp.getY(i) < 0 ? Math.sin(pp.getX(i) * 2.2) * 0.08 : 0));
         drape.geometry.computeVertexNormals();
@@ -824,10 +837,10 @@ export function buildKitchen(s, group, env) {
       napkin(P(x0 + 1.0, y0 + 1.0, z1, 0.3), 0xf9e1e7);
       napkin(P(x0 + 2.4, y1 - 0.8, z1, 1.2), 0xd0ebff);
       plateStack(P(x0 + 1.4, y0 + 2.6, z1, 0, 0.8), 3, PAL.white, 0xf3a6b8);
-      crumbs(b, cx + 2.5, cy - 2.5, z1 + 0.06, 10, 0.8, 5);
+      crumbs(d, cx + 2.5, cy - 2.5, z1 + 0.06, 10, 0.8, 5);
       blob(x1 - 1.3, y1 - 1.3, z1 + 0.03, 0.75, 0.75, 0.4);
       // crumbs fallen to the floor around it
-      crumbs(b, x0 - 0.8, cy, 0, 14, 1.4, 6); crumbs(b, cx, y0 - 0.9, 0, 12, 1.2, 7); crumbs(b, x1 + 0.9, cy + 2, 0, 8, 1, 8);
+      crumbs(d, x0 - 0.8, cy, 0, 14, 1.4, 6); crumbs(d, cx, y0 - 0.9, 0, 12, 1.2, 7); crumbs(d, x1 + 0.9, cy + 2, 0, 8, 1, 8);
       blob(cx, cy, 0, (x1 - x0) / 2 + 1.5, (y1 - y0) / 2 + 1.5, 0.35);
       continue;
     }
@@ -934,7 +947,7 @@ export function buildKitchen(s, group, env) {
     if (kind === 'tin') {   // a round biscuit tin
       const r = Math.min(x1 - x0, y1 - y0) / 2, col = cx > 75 ? 0xc0392b : 0x2f5d8a;
       b.add('metal', G.cyl, new THREE.Matrix4().compose(v3(cx, cy, (z0 + z1 - 0.3) / 2), _q.identity(), _s.set(r * 0.97, z1 - z0 - 0.3, r * 0.97)), col, 0);
-      b.add('metal', roundedBox(2, 0.35, 2, 0.12), new THREE.Matrix4().compose(v3(cx, cy, z1 - 0.175), _q.identity(), _s.set(r, 1, r)), col, null);
+      b.add('metal', G.cyl, new THREE.Matrix4().compose(v3(cx, cy, z1 - 0.17), _q.identity(), _s.set(r * 1.03, 0.34, r * 1.03)), col, null);
       b.add('metal', G.cyl, new THREE.Matrix4().compose(v3(cx, cy, z0 + 0.55), _q.identity(), _s.set(r * 0.99, 0.18, r * 0.99)), 0xe6b84a, null);
       b.add('metal', G.cyl, new THREE.Matrix4().compose(v3(cx, cy, z1 - 0.32), _q.identity(), _s.set(r * 1.01, 0.08, r * 1.01)), 0xe6b84a, null);
       b.add('gloss', G.cyl, new THREE.Matrix4().compose(v3(cx, cy, z1 + 0.005), _q.identity(), _s.set(r * 0.55, 0.01, r * 0.55)), 0xf1e3c6, null);
@@ -997,8 +1010,8 @@ export function buildKitchen(s, group, env) {
     cookieStack(P(46.3, 39.2, z), 1);
     { const pc = P(46.8, 39.6, z); pc('gloss', PROF.plate, PAL.white, L(0, 0, 0, 0.75, 1, 0.75)); for (let i = 0; i < 4; i++) cookieStack(P(46.8 + Math.cos(i * 1.6) * 0.32, 39.6 + Math.sin(i * 1.6) * 0.32, z + 0.06), i === 0 ? 3 : 1); }
     sugarBowl(P(41.5, 39.6, z)); blob(41.5, 39.6, z, 0.45, 0.45);
-    crumbs(b, 44.5, 39, z, 8, 0.8, 11);
-    crumbs(b, 20, north[1] - 1.5, 0, 10, 1.4, 12);
+    crumbs(d, 44.5, 39, z, 8, 0.8, 11);
+    crumbs(d, 20, north[1] - 1.5, 0, 10, 1.4, 12);
   }
   if (west) {
     const z = west[5], bx = west[0] + 0.7;
@@ -1054,11 +1067,10 @@ export function buildKitchen(s, group, env) {
   // the island: just a tea towel over the edge (its top is the Sprinkle Gallery)
   const isl = boxes.find((q) => q[6] === 'island');
   if (isl) {
-    const tw = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 2.4), new THREE.MeshStandardMaterial({ map: T.ginghamBlue, roughness: 0.9, side: THREE.DoubleSide }));
-    T.ginghamBlue.repeat.set(2, 3);
-    tw.position.copy(v3(isl[0] + 3, isl[1] - 0.32, isl[5] - 1.0)); group.add(tw);
-    rbox('fabric', isl[0] + 2.2, isl[1] - 0.32, isl[5] - 0.02, isl[0] + 3.8, isl[1] + 0.3, isl[5] + 0.05, 0.02, 0xc5d6ea);
-    crumbs(b, isl[0] + 4, isl[1] - 1.5, 0, 6, 0.8, 21);
+    const tw = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.5), new THREE.MeshStandardMaterial({ map: T.ginghamBlue, roughness: 0.9, side: THREE.DoubleSide }));
+    T.ginghamBlue.repeat.set(1.5, 2);
+    tw.position.copy(v3(isl[0] + 3.1, isl[1] - 0.36, isl[5] - 1.15)); tw.rotation.z = 0.06; group.add(tw);
+    crumbs(d, isl[0] + 4, isl[1] - 1.5, 0, 6, 0.8, 21);
     spoon(P(isl[3] + 2.2, isl[1] - 1.8, 0, 0.9));
   }
 
@@ -1069,6 +1081,26 @@ export function buildKitchen(s, group, env) {
   }
   catBowls(P(88, 66.6, 0, Math.PI)); blob(88.2, 66.6, 0, 1.6, 0.9, 0.35);
   sock(P(84, 7.5, 0, 0.7)); blob(84, 7.5, 0, 0.6, 0.5, 0.35);
+  // a striped runner in front of the sink counter, a mat by the door
+  if (east) {
+    const rt = runnerTex(); rt.repeat.set(1, 3);
+    const run = new THREE.Mesh(roundedBox(4.4, 0.06, 26, 0.03), new THREE.MeshStandardMaterial({ map: rt, roughness: 1 }));
+    run.position.copy(v3(east[0] - 2.9, 32, 0.03)); run.receiveShadow = true; group.add(run);
+  }
+  rbox('fabric', 62.3, 0.4, 0, 68.7, 3.2, 0.08, 0.04, 0x8a6a4a);
+  rbox('fabric', 62.8, 0.8, 0.02, 68.2, 2.8, 0.1, 0.04, 0xa98463);
+  // a broom leaning in the corner, things dropped about the floor
+  { const B = P(RW - 0.8, 2.2, 0, 0.3); B('wood', G.cylLo, 0xc89462, L(0.0, 4.2, 0, 0.09, 8.4, 0.09, 0, 0, 0.12), false); B('matte', roundedBox(1.6, 1.2, 0.5, 0.15), 0xd9b25a, L(0.5, 0.6, 0, 1, 1, 1, 0, 0, 0.12), false); B('matte', G.box, 0x8a3b2e, L(0.42, 1.25, 0, 1.0, 0.2, 0.42, 0, 0, 0.12), false); blob(RW - 0.6, 2.2, 0, 1.0, 0.5, 0.4); }
+  const bits = (x, y, kind, rot = 0) => {
+    const B = P(x, y, 0, rot);
+    if (kind === 'button') { B('gloss', G.cyl, 0xe8590c, L(0, 0.04, 0, 0.32, 0.08, 0.32)); for (const [a, c] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) B('matte', G.cylLo, 0x5c2a0c, L(a * 0.07, 0.085, c * 0.07, 0.035, 0.01, 0.035), false); }
+    if (kind === 'coin') { B('metal', G.cyl, 0xd4a548, L(0, 0.03, 0, 0.36, 0.05, 0.36)); B('metal', torus(0.31, 0.02, TAU, 4, 20), 0xc8973a, L(0, 0.055, 0, 1, 1, 1, Math.PI / 2)); }
+    if (kind === 'peas') for (let i = 0; i < 4; i++) B('gloss', G.sph, 0x74b816, L(Math.cos(i * 1.9) * 0.35, 0.12, Math.sin(i * 1.9) * 0.3, 0.12));
+    if (kind === 'hoops') for (let i = 0; i < 5; i++) B('matte', torus(0.12, 0.05, TAU, 5, 10), [0xf59f00, 0xe8590c, 0xfab005][i % 3], L(Math.cos(i * 2.3) * 0.5, 0.05, Math.sin(i * 2.3) * 0.4, 1, 1, 1, Math.PI / 2 + 0.2 * i));
+    if (kind === 'block') { B('gloss', roundedBox(0.9, 0.3, 0.6, 0.06), 0x339af0, L(0, 0.15, 0)); for (const [a, c] of [[-0.22, -0.14], [0.22, -0.14], [-0.22, 0.14], [0.22, 0.14]]) B('gloss', G.cyl, 0x339af0, L(a, 0.34, c, 0.09, 0.08, 0.09)); }
+    blob(x, y, 0, 0.45, 0.45, 0.3);
+  };
+  bits(66, 21, 'button'); bits(45.5, 24, 'coin'); bits(41, 4.5, 'peas'); bits(36.5, 24.8, 'hoops'); bits(87, 4.5, 'block', 0.4); bits(14, 47, 'coin', 1); bits(57, 20, 'hoops', 1); bits(23, 52, 'button', 2);
   // the door to the hall, with a crack of warm light under it
   {
     const dx0 = 62, dx1 = 69, dz = 13;
@@ -1119,14 +1151,14 @@ export function buildKitchen(s, group, env) {
   // ---- the batched meshes
   const shiny = (o) => (env ? { envMap: env, envMapIntensity: o } : {});
   const MATS = {
-    paint: [new THREE.MeshStandardMaterial({ vertexColors: true, map: T.paintGrain, roughness: 0.55, ...shiny(0.35) }), 0.25],
-    wood: [new THREE.MeshStandardMaterial({ vertexColors: true, map: T.grain, roughness: 0.5, ...shiny(0.3) }), 0.22],
+    paint: [new THREE.MeshStandardMaterial({ vertexColors: true, map: T.paintGrain, roughness: 0.55 }), 0.25],
+    wood: [new THREE.MeshStandardMaterial({ vertexColors: true, map: T.grain, roughness: 0.5 }), 0.22],
     marble: [new THREE.MeshStandardMaterial({ vertexColors: true, map: T.marble, roughness: 0.18, ...shiny(0.8) }), 0.07],
     tile: [new THREE.MeshStandardMaterial({ vertexColors: true, map: T.tiles, roughness: 0.25, ...shiny(0.6) }), 1 / 2.4],
     paper: [new THREE.MeshStandardMaterial({ vertexColors: true, map: T.paper, roughness: 0.95 }), 1 / 6],
-    planks: [new THREE.MeshStandardMaterial({ vertexColors: true, map: T.planks, roughness: 0.42, ...shiny(0.35) }), 1 / 8],
+    planks: [new THREE.MeshStandardMaterial({ vertexColors: true, map: T.planks, roughness: 0.42 }), 1 / 8],
     matte: [new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), 0],
-    satin: [new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, ...shiny(0.3) }), 0],
+    satin: [new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), 0],
     fabric: [new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }), 0],
     gloss: [new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.16, ...shiny(0.9) }), 0],
     metal: [new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.85, ...shiny(1.2) }), 0],
@@ -1136,11 +1168,10 @@ export function buildKitchen(s, group, env) {
     emit: [new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }), 0],
     ceiling: [new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), 0],
   };
-  for (const [key, [mat, tri]] of Object.entries(MATS)) {
-    const geo = b.geometry(key, tri);
-    if (!geo) continue;
-    const m = new THREE.Mesh(geo, mat);
-    m.castShadow = !['emit', 'glass', 'water', 'paper', 'planks', 'tile', 'ceiling', 'lamp'].includes(key);
+  for (const [key, [mat, tri]] of Object.entries(MATS)) for (const [batch, casts] of [[b, true], [d, false]]) for (const cell of batch.cells(key)) {
+    const geo = batch.geometry(cell, tri);
+    const m = new THREE.Mesh(geo, mat); m.name = cell;
+    m.castShadow = casts && !['emit', 'glass', 'water', 'paper', 'planks', 'tile', 'ceiling', 'lamp'].includes(key);
     m.receiveShadow = key !== 'emit';
     if (key === 'glass') m.renderOrder = 2;
     group.add(m);
