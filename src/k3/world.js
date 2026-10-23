@@ -47,7 +47,10 @@ box(62, 52, 0, 68, 57, 3, 'breadbin');
 box(72, 30, 0, 75, 33, 1.6, 'tin');
 box(76, 24, 0, 79, 27, 1.6, 'tin');
 box(70, 44, 0, 74, 46, 2.4, 'cereal');
-// a rug in the middle of the new floor (just a floor, but somewhere to be)
+// up high: wall cupboards over the north counter (the kettle's steam carries you up), and a
+// shelf over the toaster on the east wall (the toaster pops you up to it)
+box(8, 41.8, 9.5, 52, 44, 11.5, 'wallcab');
+box(92.5, 54, 12, 100, 62, 12.6, 'wallcab');
 // the pantry: a big open cupboard on the south wall (its floor is the room's floor)
 box(0, 0, 0, 2, 12, 9, 'cupboard');
 box(14, 0, 0, 30, 2, 9, 'cupboard');
@@ -72,7 +75,19 @@ ent({ type: 'nest', x: 22, y: 40, z: 4 });      // by the stove
 ent({ type: 'nest', x: 59, y: 39, z: 10 });     // on top of the fridge
 // ants about the place
 for (const [x, y, z, k] of [[40, 26, 0, 'ant'], [12, 20, 0, 'ant'], [28, 30, 0, 'ant'], [27, 19, 4, 'ant'], [15, 40, 4, 'ant'], [36, 40, 4, 'soldier'], [4, 26, 4, 'ant'],
-  [57, 37, 10, 'soldier'], [70, 20, 0, 'ant'], [80, 50, 0, 'ant'], [66, 64, 0, 'soldier'], [86, 14, 0, 'ant'], [96, 20, 4, 'ant'], [96, 58, 4, 'soldier'], [25, 67, 6, 'ant'], [35, 69, 8, 'ant'], [64, 54, 3, 'ant']]) ent({ type: 'ant', kind: k, x, y, z });
+  [57, 37, 10, 'ant'], [70, 20, 0, 'jumper'], [80, 50, 0, 'ant'], [66, 64, 0, 'soldier'], [86, 14, 0, 'carrier'], [96, 20, 4, 'ant'], [96, 58, 4, 'jumper'], [25, 67, 6, 'ant'], [35, 69, 8, 'ant'], [64, 54, 3, 'ant']]) ent({ type: 'ant', kind: k, x, y, z });
+// the kettle on the stove: it boils now and then, and its steam is a lift
+ent({ type: 'kettle', x: 30, y: 40.6, z: 4.15 });
+ent({ type: 'sign', x: 24, y: 34, z: 0, text: 'When the kettle whistles, jump into its steam: it carries you up to the cupboards. (Up on the stove you have to get first.)' });
+ent({ type: 'sign', x: 90, y: 50, z: 0, text: 'The toaster pops anything that stands on it. Anything.' });
+// sprinkles: hidden everywhere, for the ones who go looking (z is the height they float at)
+for (const [x, y, z] of [
+  [3, 3, 0], [97, 3, 0], [3, 66, 0], [60, 66, 0], [49, 11, 0], [45, 8, 0], [53, 15, 0],   // corners, under the table
+  [39.7, 11, 1.5], [37.2, 27, 2.2], [71, 31.5, 1.6], [77.5, 25.5, 1.6], [72, 45, 2.4], [65, 54.5, 3],   // on things
+  [21, 17, 4], [33, 22, 4], [3, 14, 4], [9.5, 31, 6.2], [40, 43, 4], [97, 12, 4], [97, 32, 4.1],   // counters and the island
+  [20, 63, 2], [40, 65, 4], [19, 67, 6], [41, 69, 8], [62, 42, 10],   // the shelf and the fridge
+  [12, 43, 11.5], [24, 43, 11.5], [38, 43, 11.5], [50, 43, 11.5], [96, 60, 12.6],   // the secret heights
+]) ent({ type: 'sprinkle', x, y, z: z + 0.6 });
 // the cake on the table, and the queen who wants it (she comes when the nests are gone)
 ent({ type: 'cake', x: 49, y: 13, z: 3 });
 ent({ type: 'queen', x: 49, y: 9.5, z: 3 });

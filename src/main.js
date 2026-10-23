@@ -166,6 +166,7 @@ function startRun(id, extra = null) {
   app.cam = mkCam(app.run);
   snapCam(app.cam, app.run, true);
   app.fx = []; app.bubbles = []; app.shake = 0; acc = 0; app.powers = null; app.toast = null;
+  app.kToast = app.kBlock = app.kLaunch = false; app.kPops = []; app.kBanner = null; app.kLast = null;
   app.banner = 6;
   go('play');
   playMusic(ch.music || 'garden');
@@ -642,10 +643,25 @@ function onEvents(events) {
 
 // The Kitchen: banners, hit-stop and the camera's punch on every big moment
 const banner = (text, color) => { app.kBanner = { text, color, life: 2.5 }; };
+const pop = (text, color, size = 1) => { (app.kPops ||= []).push({ text, color, size, life: 1.2, x: W / 2 + (Math.random() - 0.5) * W * 0.2, y: H * 0.38 }); };
 function kitchenEvents(events) {
   for (const e of events) {
     switch (e.type) {
       case 'blast': punch(app.cam, e.big ? 1 : 0.6); if (!app.online && S().shake) app.hitstop = Math.max(app.hitstop || 0, e.big ? 0.07 : 0.035); break;
+      case 'chain': {   // a combo: a word in the middle, and the bigger it gets the longer time stands still
+        const words = ['', '', '', 'Chain!', 'Combo!', 'Sweet!', 'Sugar rush!', 'CARAMEL!!'];
+        pop(`${words[Math.min(e.n, 7)] || 'CARAMEL!!'} ×${e.n}`, e.n >= 5 ? '#ffd43b' : '#ffa94d', 1.2 + Math.min(e.n, 8) * 0.12);
+        if (!app.online) app.hitstop = Math.max(app.hitstop || 0, Math.min(0.25, 0.04 * e.n));
+        break;
+      }
+      case 'wave': banner('The colony is angry!', '#ff8787'); break;
+      case 'nestsLeft': if (e.n > 0) say(e.n === 1 ? 'One nest left!' : `${e.n} nests left.`); else say('That\'s every nest… but what\'s that on the table?'); break;
+      case 'pickup': pop(`✦ ${e.n} / ${e.of}`, '#fcc2d7', 0.9); if (e.n === e.of) banner('Every sprinkle!', '#fcc2d7'); break;
+      case 'toast': if (!app.kToast) { app.kToast = true; say(e.who ? 'Spice: I am toast!' : 'Sugar: WHEEEE!'); } break;
+      case 'kettle': if (app.run.players.some((p) => Math.hypot(p.x - e.x, p.y - e.y) < 14 && Math.abs(p.z - e.z) < 3)) say('The kettle is whistling: jump into the steam!'); break;
+      case 'shieldOff': pop('Shield down!', '#ffffff', 0.9); break;
+      case 'block': if (!app.kBlock) { app.kBlock = true; say('That ant is holding a sugar cube! Get round the side of it, or blow it out of its hands.'); } break;
+      case 'launch': if (!app.kLaunch) { app.kLaunch = true; say('Up you go! You fly the way your camera looks.'); } break;
       case 'nestDown': punch(app.cam, 1.5); if (!app.online) app.hitstop = 0.12; break;
       case 'checkpoint': if (e.name && e.name !== app.kLast) { app.kLast = e.name; banner(e.name); } break;
       case 'doorOpen': say('The candy door is open!'); break;
@@ -817,6 +833,8 @@ function watchZone(dt) {
 
 function updateFx(dt) {
   const g = app.run && app.run.k3 ? 0 : 12;
+  if (app.kPops) { for (const q of app.kPops) q.life -= dt; app.kPops = app.kPops.filter((q) => q.life > 0); }
+  if (app.kBanner) app.kBanner.life -= dt;
   for (const f of app.fx) { f.life -= dt; f.x += f.vx * dt; f.y += f.vy * dt; f.vy += g * dt; }
   app.fx = app.fx.filter((f) => f.life > 0);
   for (const b of app.bubbles) { if (b.delay > 0) b.delay -= dt; else b.life -= dt; }
@@ -1348,7 +1366,44 @@ function drawSigns(s) {
 function drawKitchenHUD(s, P) {
   s.players.forEach((p, i) => {
     for (let h = 0; h < 3; h++) heart(ctx, (i ? W - 30 - h * P * 1.2 : 30 + h * P * 1.2), 24 + P * 1.4, P * 0.42, h < p.hp ? PLAYER_COLORS[i] : 'rgba(255,255,255,0.25)', h < p.hp);
+    // a crosshair in the middle of each half: where your gun goes
+    const cx = i ? W * 0.75 : W * 0.25, cy = H * 0.47, r = P * 0.55;
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2); ctx.stroke();
+    for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.moveTo(cx + a * r * 0.75, cy + b * r * 0.75); ctx.lineTo(cx + a * r * 1.15, cy + b * r * 1.15); ctx.stroke(); }
+    ctx.fillStyle = PLAYER_COLORS[i]; ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
+    // an arrow at the edge of your half to the nearest nest you haven't got yet
+    if (k3view && !s.boss) {
+      let best = null, bd = Infinity;
+      for (const e of s.ents) if (e.type === 'nest' && !e.dead) { const d = Math.hypot(e.x - p.x, e.y - p.y, (e.z - p.z) * 2); if (d < bd) { bd = d; best = e; } }
+      if (best && bd > 8) {
+        const pr = k3view.project(i, best.x, best.y, best.z + 1, W, H);
+        const x0 = i ? W / 2 : 0, x1 = i ? W : W / 2;
+        let ax = pr ? pr[0] : cx, ay = pr ? pr[1] : H;
+        const inside = pr && ax > x0 + 30 && ax < x1 - 30 && ay > 60 && ay < H - 60;
+        if (!inside) {
+          const dx = ax - cx, dy = ay - cy, l = Math.hypot(dx, dy) || 1;
+          const k = Math.min((x1 - x0) / 2 - 40, H / 2 - 70) / l;
+          ax = cx + dx * k; ay = cy + dy * k;
+        }
+        const ang = Math.atan2(ay - cy, ax - cx);
+        ctx.save(); ctx.translate(ax, ay); ctx.rotate(inside ? Math.PI / 2 : ang);
+        ctx.fillStyle = 'rgba(255,146,43,0.95)'; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-8, -9); ctx.lineTo(-8, 9); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        txt(`nest ${Math.round(bd)} m`, ax, ay + (inside ? -18 : 20), { size: P * 0.55, color: '#ffd8a8', weight: '600' });
+      }
+    }
   });
+  // the hunt: nests left, sprinkles found
+  const nests = s.ents.filter((e) => e.type === 'nest');
+  if (!s.boss) txt(`Nests ${nests.filter((e) => e.dead).length} / ${nests.length}`, W / 2, 24, { size: P * 0.85, color: '#ffd8a8' });
+  txt(`✦ ${s.sprinkles} / ${s.sprinklesTotal}`, W / 2, 24 + P * 1.2, { size: P * 0.7, color: '#fcc2d7' });
+  // combo pop-ups
+  for (const pop of app.kPops || []) {
+    ctx.globalAlpha = Math.min(1, pop.life * 2);
+    txt(pop.text, pop.x, pop.y - (1.2 - pop.life) * 40, { size: P * pop.size, color: pop.color });
+    ctx.globalAlpha = 1;
+  }
   const q = queenOf(s);
   if (q && q.state !== 'sleep' && !q.dead) {
     const bw = Math.min(520, W * 0.6), bx = (W - bw) / 2, by = 46;

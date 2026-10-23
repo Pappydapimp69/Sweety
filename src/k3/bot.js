@@ -23,6 +23,14 @@ function faceTo(p, dx, dy) {
   return toward(p, dx, dy, 0);
 }
 
+// turn the camera toward a world direction (the gun goes where the camera looks)
+function camTo(p, dx, dy, tight = 0.985) {
+  const d = len(dx, dy) || 1, ux = dx / d, uy = dy / d;
+  if (ux * p.cx + uy * p.cy > tight) return {};
+  return (p.cx * uy - p.cy * ux) > 0 ? { camL: true } : { camR: true };
+}
+const looks = (p, dx, dy, c = 0.94) => { const d = len(dx, dy) || 1; return (dx * p.cx + dy * p.cy) / d > c; };
+
 // a walk map per level: 0.5 m cells you can stand in at that height, without stepping off
 const maps = new Map();
 const CELL = 0.5;
@@ -92,12 +100,28 @@ function fight(s, p, target) {
   const close = s.ents.find((e) => (e.type === 'ant' || e.type === 'queen') && !e.dead && e.state !== 'sleep' && Math.abs(e.z - p.z) < 1 && len(e.x - p.x, e.y - p.y) < (e.type === 'queen' ? 3.2 : 1.8));
   if (close && close.type === 'queen' && p.z > 2.5) {   // on the table: keep away from her, toward the table's far side
     const ax = p.x + (p.x - close.x) * 3, ay = p.y + (p.y - close.y) * 3;
-    return { ...go(s, p, Math.max(42.8, Math.min(55.2, ax)), Math.max(6.8, Math.min(16.2, ay)), 0), ability: true };
+    return { ...go(s, p, Math.max(42.8, Math.min(55.2, ax)), Math.max(6.8, Math.min(16.2, ay)), 0), ...camTo(p, close.x - p.x, close.y - p.y), ability: looks(p, close.x - p.x, close.y - p.y) };
   }
-  if (close && p.z < 0.5) { const st = go(s, p, p.x + (p.x - close.x) * 2, p.y + (p.y - close.y) * 2, 0); return { ...st, ability: true }; }   // back off (only on the floor: up high, a step back is a fall)
+  if (close) {   // too close: shoot it point blank (and back off, on the floor; up high a step back is a fall)
+    const dx = close.x - p.x, dy = close.y - p.y;
+    const st = p.z < 0.5 && close.type !== 'queen' ? go(s, p, p.x - dx * 2, p.y - dy * 2, 0) : { ...NONE };
+    const want = p.id === SPICE || close.coat > 0 || (close.type === 'ant' && close.kind !== 'soldier');
+    return { ...st, ...camTo(p, dx, dy, 0.97), ability: want && looks(p, dx, dy, 0.9) };
+  }
   if (target && len(target.x - p.x, target.y - p.y) > (p.id === SPICE ? 6 : 7)) return go(s, p, target.x, target.y, 0.5);
-  const lit = p.id === SPICE || s.ents.some((e) => !e.dead && e.coat > 0 && Math.abs(e.z - p.z) < 2 && len(e.x - p.x, e.y - p.y) < K.SPARK_RANGE) || s.ents.some((e) => e.type === 'ant' && e.kind === 'ant' && !e.dead && Math.abs(e.z - p.z) < 1 && len(e.x - p.x, e.y - p.y) < 8);
-  return { ...NONE, ability: lit };
+  // pick what to shoot: Spice the least coated; Sugar the coated (or a bare small ant); turn the camera onto it
+  let best = null, bs = -1e9;
+  for (const e of s.ents) {
+    if (e.dead || !(e.type === 'ant' || e.type === 'nest' || (e.type === 'queen' && e.state !== 'sleep')) || Math.abs(e.z - p.z) > 2.5) continue;
+    const d = len(e.x - p.x, e.y - p.y);
+    if (d > (p.id === SPICE ? 8.5 : K.SPARK_RANGE)) continue;
+    const want = p.id === SPICE ? (e.coat < 3 ? 2 : 0) : (e.coat > 0 ? 2 : e.type === 'ant' && e.kind !== 'soldier' ? 1 : -5);
+    const sc = want * 10 - d;
+    if (sc > bs) { bs = sc; best = e; }
+  }
+  if (!best || bs < -2) return { ...NONE };
+  const dx = best.x - p.x, dy = best.y - p.y;
+  return { ...NONE, ...camTo(p, dx, dy), ability: looks(p, dx, dy) };
 }
 const threatNear = (s, p, r) => s.ents.some((e) => e.type === 'ant' && !e.dead && Math.abs(e.z - p.z) < 1 && len(e.x - p.x, e.y - p.y) < r);
 
@@ -111,13 +135,13 @@ function launch(s, p, o, x, y, fx, fy, after) {
   const herSpot = [x, y], hisSpot = [x - fy * 0.55, y + fx * 0.55];
   if (!ready(her, ...herSpot) || !ready(him, ...hisSpot)) return { ...NONE };
   const pd = s.puddles.find((q) => !q.burn && Math.abs(q.z - p.z) < 0.3 && len(q.x - her.x, q.y - her.y) < 0.5);
-  if (p.id === SPICE) {
-    if (!pd) return faceTo(p, her.x - p.x, her.y - p.y) || { ...NONE, ability: true };   // splash her feet
-    return faceTo(p, fx, fy) || { ...NONE };
+  if (p.id === SPICE) {   // splash her feet (look at her, fire), then look the way up
+    if (!pd) { const c = camTo(p, her.x - p.x, her.y - p.y, 0.97); return { ...NONE, ...c, ability: !c.camL && !c.camR }; }
+    return { ...NONE, ...camTo(p, fx, fy) };
   }
-  if (!pd) return faceTo(p, fx, fy) || { ...NONE };
-  const bothIn = [her, him].every((q) => len(q.x - pd.x, q.y - pd.y) < K.PUDDLE_R + 0.15 && q.fx * fx + q.fy * fy > 0.9);
-  return { ...NONE, ability: bothIn };
+  if (!pd) return { ...NONE, ...camTo(p, fx, fy) };
+  const bothIn = [her, him].every((q) => len(q.x - pd.x, q.y - pd.y) < K.PUDDLE_R + 0.15 && looks(q, fx, fy, 0.97));
+  return { ...NONE, ...camTo(p, fx, fy), ability: bothIn };
 }
 
 // the bot's own memory, kept off the sim state (the sim stays exactly what the inputs made it)
